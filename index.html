@@ -1474,9 +1474,132 @@ function consequences() {
   if (!out.length) out.push(['ok', L('各项正常：冷却、冲洗、润滑都到位。', 'All normal: cooling, flushing and lubrication in place.')]);
   return out;
 }
+// ── 介质怎么管：成分与配比 / 温度 / 细菌与清洁度 ──
+const VER = src => `<span class="badge ok">${L('已核实', 'verified')} · ${src}</span>`;
+const SUP = () => `<span class="badge">${L('厂商公开资料', 'supplier data')}</span>`;
+const li = arr => `<ul style="margin:6px 0 0;padding-left:18px;line-height:1.7">${arr.map(t => `<li>${t}</li>`).join('')}</ul>`;
+const para = t => `<div style="margin-top:8px">${t}</div>`;
+function medHTML(kind) {
+  const card = (n, title, badge, body) => `<div class="explain" style="height:100%"><div style="font-weight:700;font-size:13.5px;margin-bottom:4px">${n} ${title} ${badge}</div>${body}</div>`;
+  if (kind === 'water') return `<div class="g3" style="align-items:stretch">
+    ${card('①', L('成分与配比', 'Composition and dilution'), GEN(), L(
+      '<b>原液</b>（买来的浓缩液）里通常有：' + li([
+        '<b>基础油</b>：矿物油。乳化液里最多，半合成较少，全合成没有',
+        '<b>乳化剂 / 表面活性剂</b>：让油和水混成稳定的乳液',
+        '<b>防锈剂</b>：保护刚磨出来的新鲜钢表面',
+        '<b>润滑 / 极压添加剂</b>：减小砂轮和工件之间的摩擦',
+        '<b>杀菌剂、防霉剂、消泡剂</b>，有的还加螯合剂、偶合剂']) +
+      para('<b>三种类型</b>：乳化液（乳白色，润滑好）/ 半合成（半透明）/ 全合成（透明，冷却和沉降好，看得清工件）。') +
+      para('<b>配比</b>：原液加水稀释，使用浓度只有<b>几个百分点</b>（磨削常见约 2–5% 量级），按油品供应商的推荐值定。') +
+      para('<b>怎么配</b>：先放水，再把原液<b>慢慢倒进水里</b>并搅拌（「油入水」）。反过来倒，乳液容易不稳定。' + SUP()) +
+      para('<b>测浓度</b>：折光仪读数 × 该油品的<b>折光系数</b>（每种油品不同，查技术资料）。') +
+      para('<b>配液用水</b>：水太软容易起泡，太硬会析出钙皂、堵过滤器。硬度要求各家不同（例如有供应商建议 10–15 °dH）。' + SUP()),
+      'The <b>concentrate</b> usually contains:' + li([
+        '<b>base oil</b>: mineral oil — most in emulsions, less in semi-synthetics, none in synthetics',
+        '<b>emulsifiers / surfactants</b>: keep oil and water as a stable emulsion',
+        '<b>corrosion inhibitors</b>: protect the freshly ground steel',
+        '<b>lubricity / EP additives</b>: reduce wheel–work friction',
+        '<b>biocides, fungicides, defoamers</b>; some also chelating and coupling agents']) +
+      para('<b>Three types</b>: emulsion (milky, good lubrication) / semi-synthetic (translucent) / synthetic (clear, good cooling and settling, part visible).') +
+      para('<b>Dilution</b>: the concentrate is diluted to only <b>a few percent</b> (grinding typically ~2–5%), per the supplier’s recommendation.') +
+      para('<b>Mixing</b>: water first, then pour the concentrate <b>slowly into the water</b> while stirring ("oil into water"). The reverse can make the emulsion unstable. ' + SUP()) +
+      para('<b>Checking concentration</b>: refractometer reading × the product’s <b>refractometer factor</b> (product-specific, see the data sheet).') +
+      para('<b>Make-up water</b>: too soft foams, too hard precipitates calcium soaps and clogs filters. Hardness targets differ by supplier (e.g. one recommends 10–15 °dH). ' + SUP())))}
+    ${card('②', L('温度', 'Temperature'), GEN(), L(
+      '<b>为什么要管</b>：' + li([
+        '工件热胀冷缩 → <b>尺寸漂移</b>（见上面「温度为什么也要管」的计算）',
+        '机床受热变形，砂轮和工件的相对位置会变',
+        '液温高，<b>细菌繁殖更快</b>，水分蒸发也让浓度变化']) +
+      para('<b>怎么做</b>：液箱配<b>冷却机</b>，让液温<b>稳定</b>，并接近车间和量仪的温度。重点是「稳」，不是越冷越好：太冷时工件比量仪凉，机床还会结露。') +
+      para('<b>量级</b>：冷却机控温精度常见约 ±1 °C，精密的可以做到 ±0.2 °C。' + SUP() + ' 设定值按本厂工艺。') +
+      para('<b>日常</b>：每班记录液温，夏天和长时间连续生产时重点盯。'),
+      '<b>Why it matters</b>:' + li([
+        'the part expands and shrinks → <b>size drift</b> (see "Why temperature matters too" above)',
+        'the machine distorts thermally, shifting the wheel–work position',
+        'warm fluid <b>grows bacteria faster</b>, and evaporation shifts concentration']) +
+      para('<b>How</b>: a <b>chiller</b> on the tank keeps the fluid <b>stable</b> and close to shop and gauge temperature. Stable matters more than cold: too cold makes the part cooler than the gauge and the machine may sweat.') +
+      para('<b>Order of magnitude</b>: chillers typically hold about ±1 °C, precision units down to ±0.2 °C. ' + SUP() + ' Set-point per your process.') +
+      para('<b>Daily</b>: log fluid temperature every shift, especially in summer and on long runs.')))}
+    ${card('③', L('细菌与清洁度管理', 'Bacteria and cleanliness'), VER('HSE'), L(
+      '<b>为什么会长菌</b>：水基液 + 合适的温度 + 杂油 + 停机不流动。<b>症状</b>：停机后再开机发臭（臭鸡蛋味）、pH 下降、浓度掉、乳液分层、管路长黏泥、零件生锈；油雾和皮肤接触还会影响操作员健康。' +
+      para('<b>监测</b>（英国 HSE 指南）：用<b>浸片</b>每周测一次细菌。') +
+      `<table class="tbl" style="margin-top:4px"><tr><th>CFU/mL</th><th>判定</th><th>动作</th></tr>
+        <tr><td>&lt; 10⁴</td><td style="color:var(--green)">控制良好</td><td>照常检查和维护</td></tr>
+        <tr><td>10⁴ – &lt;10⁶</td><td style="color:var(--orange)">尚可</td><td>按供应商建议调整；还在长，就按推荐剂量加杀菌剂</td></tr>
+        <tr><td>≥ 10⁶</td><td style="color:var(--red)">控制差</td><td>立即处理，通常要排空并清洗液箱</td></tr></table>` +
+      '<div style="margin-top:6px">浓度和 pH 也每周测。pH 下降常提示细菌增多，但 <b>pH 不能代替浸片</b>。</div>' +
+      para('<b>预防</b> ' + GEN() + '：' + li([
+        '浓度保持在范围内（<b>偏低最容易长菌</b>）',
+        '用撇油器撇掉浮油，查导轨油、液压油泄漏',
+        '停机和周末也定时循环，别让液体变成死水',
+        '定期清掉液箱底部的磨屑泥',
+        '杀菌剂按供应商剂量加，不凭感觉加',
+        '换液前先用系统清洗剂循环清洗管路，再排空、冲洗、重新配液，否则残留的细菌马上污染新液',
+        '液箱不是垃圾桶：不倒剩饭、饮料、烟头'])) +
+      para('<b>清洁度</b> ' + GEN() + '：磁性分离器 + 纸带过滤（或预涂层过滤）去掉铁屑和砂轮碎粒；纸带按时走带，磁辊按时清理，液箱定期排泥。过滤精度按设备和工艺要求。'),
+      '<b>Why bacteria grow</b>: water-based fluid + warm temperature + tramp oil + standing still. <b>Symptoms</b>: smell at start-up after a stop (rotten eggs), falling pH and concentration, split emulsion, slime in pipes, rusty parts; mist and skin contact also affect operators’ health.' +
+      para('<b>Monitoring</b> (UK HSE guidance): <b>dip slide</b> once a week.') +
+      `<table class="tbl" style="margin-top:4px"><tr><th>CFU/mL</th><th>rating</th><th>action</th></tr>
+        <tr><td>&lt; 10⁴</td><td style="color:var(--green)">good</td><td>keep routine checks</td></tr>
+        <tr><td>10⁴ – &lt;10⁶</td><td style="color:var(--orange)">reasonable</td><td>adjust per supplier; add biocide at the recommended dose if growth continues</td></tr>
+        <tr><td>≥ 10⁶</td><td style="color:var(--red)">poor</td><td>act now; usually drain and clean the sump</td></tr></table>` +
+      '<div style="margin-top:6px">Check concentration and pH weekly too. Falling pH often signals bacteria, but <b>pH is no substitute for dip slides</b>.</div>' +
+      para('<b>Prevention</b> ' + GEN() + ':' + li([
+        'keep concentration in range (<b>too low grows bacteria fastest</b>)',
+        'skim tramp oil; fix slideway and hydraulic leaks',
+        'circulate during stops and weekends — no stagnant fluid',
+        'remove swarf sludge from the tank bottom regularly',
+        'dose biocide per the supplier, never by feel',
+        'before a change-out, circulate a system cleaner, then drain, rinse and recharge — otherwise leftover bacteria seed the new fluid',
+        'the sump is not a bin: no food, drinks or cigarette ends'])) +
+      para('<b>Cleanliness</b> ' + GEN() + ': a magnetic separator + paper-band (or precoat) filter removes swarf and wheel grit; index the paper on time, clean the magnetic drum, desludge the tank. Filtration rating per machine and process.')))}
+  </div>`;
+  return `<div class="g3" style="align-items:stretch">
+    ${card('①', L('成分与配比', 'Composition and dilution'), GEN(), L(
+      '<b>纯油直接用，不加水</b>（不稀释，所以没有「配比」）。成分通常是：' + li([
+        '<b>基础油</b>：低黏度的精制矿物油或合成油',
+        '<b>润滑 / 极压添加剂</b>：控制油石和工件之间的油膜',
+        '<b>抗氧剂、防锈剂、抗雾剂</b>']) +
+      para('<b>黏度很低</b>：几款公开的超精 / 珩磨油，40 °C 运动黏度约 4–5 mm²/s（例如 Castrol Honilo 981 为 4.9，Mobilgrind 513 为 5.2，Sunnen SF 约 5）。' + SUP() + ' 重负荷的珩磨油可以到 20 mm²/s 以上。') +
+      para('<b>为什么黏度最重要</b>：黏度决定油膜厚度，油膜厚度决定油石什么时候从「切削」转到「抛光」。黏度高，过早抛光、去除不够；黏度低，一直在切、粗糙度降不下来。') +
+      para('<b>补油</b>：零件会把油带走，要定期补<b>同一牌号</b>的新油，不同油品不要混。'),
+      '<b>Used neat, no water</b> (no dilution, so no "mix ratio"). Typically:' + li([
+        '<b>base oil</b>: low-viscosity refined mineral or synthetic oil',
+        '<b>lubricity / EP additives</b>: control the film between stone and part',
+        '<b>antioxidants, rust inhibitors, anti-mist agents</b>']) +
+      para('<b>Very low viscosity</b>: published superfinishing / honing oils are about 4–5 mm²/s at 40 °C (e.g. Castrol Honilo 981 4.9, Mobilgrind 513 5.2, Sunnen SF ~5). ' + SUP() + ' Heavy-duty honing oils reach 20 mm²/s or more.') +
+      para('<b>Why viscosity matters most</b>: viscosity sets film thickness, and film thickness decides when the stone moves from cutting to polishing. Too thick → polishes too early, too little removal; too thin → keeps cutting, roughness stays high.') +
+      para('<b>Top-up</b>: parts carry oil away; top up with <b>the same product</b>, never mix brands.')))}
+    ${card('②', L('温度', 'Temperature'), GEN(), L(
+      '<b>温度 → 黏度 → 油膜 → 超精效果</b>：油温升高，黏度下降，油膜变薄，去除量和粗糙度都跟着变。所以超精油也要控温：油箱配<b>油冷却器</b>，让油温稳定在接近环境温度。' +
+      para('<b>日常</b>：每班记录油温；开机先循环到油温稳定再干活。早班和下午的结果不一样，多半就是油温变了。') +
+      para('<b>安全</b>：低黏度油的闪点比较低，加工时有油雾。要有油雾收集，远离明火和焊接，配好灭火器。'),
+      '<b>Temperature → viscosity → film → result</b>: warmer oil is thinner, the film drops, and removal and roughness shift. So superfinishing oil is temperature-controlled too: an <b>oil cooler</b> keeps it stable near ambient.' +
+      para('<b>Daily</b>: log oil temperature every shift; circulate until stable before production. Different results morning vs afternoon usually mean the oil temperature moved.') +
+      para('<b>Safety</b>: low-viscosity oils have lower flash points and make mist. Use mist extraction, keep away from flames and welding, keep extinguishers ready.')))}
+    ${card('③', L('细菌与清洁度管理', 'Bacteria and cleanliness'), GEN(), L(
+      '<b>细菌</b>：纯油本身不含水，一般不容易长菌。<b>问题出在进水</b>：零件把磨削液带进来，水沉在油箱底部，油水交界处就会长菌发臭；同时油会乳化、黏度变化，零件生锈。油品储存说明也要求防止进水。' + SUP() +
+      para('<b>防进水</b>：' + li([
+        '零件进超精前要吹干，或按工艺处理',
+        '定期从油箱底部放水',
+        '定期送检含水量、黏度和酸值（看氧化）'])) +
+      para('<b>清洁度</b>：油石碎屑和细铁屑非常细，要用<b>精密过滤</b>（纸芯、袋式或离心等），过滤要比磨削液更细。可以按颗粒污染等级（如 ISO 4406 方法）监测油的清洁度。') +
+      para('<b>换油</b>：油脏了、氧化了或进水严重，就整箱更换，并清洗油箱和管路。'),
+      '<b>Bacteria</b>: neat oil holds no water, so bacteria rarely grow. <b>The problem is water ingress</b>: parts carry coolant in, water settles at the tank bottom, and the oil–water interface grows bacteria and smells; the oil emulsifies, viscosity shifts and parts rust. Product storage notes also say to avoid water ingress. ' + SUP() +
+      para('<b>Keep water out</b>:' + li([
+        'blow parts dry (or treat per process) before superfinishing',
+        'drain water from the tank bottom regularly',
+        'test water content, viscosity and acid number (oxidation) periodically'])) +
+      para('<b>Cleanliness</b>: stone debris and fine swarf are tiny — use <b>fine filtration</b> (paper cartridge, bag or centrifuge), finer than for grinding coolant. Oil cleanliness can be tracked as a particle code (e.g. the ISO 4406 method).') +
+      para('<b>Change-out</b>: when dirty, oxidised or heavily watered, replace the whole charge and clean the tank and lines.')))}
+  </div>`;
+}
+
 function renderCoolUpd() {
   const W = CL.kind === 'water';
   $('loopBox').innerHTML = loopSVG(CL.kind);
+  $('medBox').innerHTML = medHTML(CL.kind);
+  ['kindSeg', 'medSeg'].forEach(id => $(id).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === CL.kind))));
   $('consBox').innerHTML = consequences().map(([k, t]) => `<div class="myth" style="margin-bottom:6px">${k === 'ok' ? '<span class="o">✓</span>' : '<span class="x">⚠</span>'} ${t}</div>`).join('');
   const dOD = 90 * ALPHA * CL.dT * 1000, dID = 50 * ALPHA * CL.dT * 1000;
   $('dTV').textContent = `${CL.dT} °C`;
@@ -1537,8 +1660,18 @@ function renderCoolant() {
         '<b>Slide or hydraulic oil leaking into coolant</b>: tramp oil degrades cooling and filtration and feeds bacteria — skim it and fix leaks.<br><br>' +
         'In short: <b>coolant must stay cool and clean, superfinishing oil must keep its film and stay clean — and the two must never mix.</b>')}</div>
     </div>
+  </div>
+  <div class="glass card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">${L('介质怎么管：成分 · 温度 · 细菌与清洁度', 'Managing the fluids: composition · temperature · bacteria and cleanliness')}</h2>
+      ${seg('medSeg', [['water', L('磨削液（砂轮）', 'grinding coolant (wheel)')], ['oil', L('超精油（油石）', 'superfinishing oil (stone)')]], CL.kind)}
+    </div>
+    <div id="medBox" style="margin-top:10px"></div>
+    <div class="legend" style="margin-top:8px">${L('数值是公开资料里的通用量级或示例。具体浓度、温度设定、过滤精度和检测频次，以本厂油品供应商的技术资料和工艺文件为准。细菌分级来源：英国 HSE《金属加工液细菌控制》指南。',
+      'Figures are general orders of magnitude or published examples. Actual concentration, set-points, filtration rating and test frequency follow your fluid supplier’s data and your process documents. Bacteria bands: UK HSE guidance on metalworking-fluid bacteria.')}</div>
   </div>`;
   bindSeg('kindSeg', v => { CL.kind = v; renderCoolUpd(); });
+  bindSeg('medSeg', v => { CL.kind = v; renderCoolUpd(); });
   bindSeg('concSeg', v => { CL.conc = v; renderCoolUpd(); });
   bindSeg('filtSeg', v => { CL.filt = v; renderCoolUpd(); });
   bindSeg('nozSeg', v => { CL.noz = v; renderCoolUpd(); });
@@ -1761,6 +1894,7 @@ PAGES.params = {
   if (q.get('ring')) PR.ring = q.get('ring');
   if (q.get('step')) PR.step = +q.get('step');
   if (q.get('dm')) DR.m = q.get('dm');
+  if (q.get('cl')) CL.kind = q.get('cl');   // 测试用：冷却页介质
   if (q.get('fm')) FACE_MODE = q.get('fm');   // 测试用：端面磨送料方式   // 测试用：修整方式
   renderChrome();
   if (q.get('solo')) setTimeout(() => { const t = setInterval(() => { if (V3.r && RING_GEO.tried) { V3.r.setSolo(true); V3.r.setCut(q.get('solo') === 'cut'); clearInterval(t); } }, 100); }, 300);   // 测试用

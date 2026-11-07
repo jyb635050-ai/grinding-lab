@@ -402,8 +402,9 @@ function mountV3(host, ringType, key) {
   // 内沟磨是左右关系：内圈在左、大砂轮在右，套圈轴线朝向观察者（局部 +X → 世界 +X，局部 Y → 世界 +Z）
   const side = key === 'groove';   // 沟道磨（内沟、大沟）都是左右关系
   const machine = new THREE.Group(); scene.add(machine);
-  if (side) machine.rotation.x = Math.PI / 2; else machine.rotation.z = Math.PI / 2;   // 其余工序：局部 +X（接触方向）朝上，轴线水平
-  const clip = new THREE.Plane(side ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(0, 0, -1), 0);   // 剖切面都过轴线
+  // 无心磨也是左右关系：磨削砂轮在左、导轮在右、托板在工件下面（局部 +X → 世界 +X，局部 +Z → 世界 +Y）
+  if (side) machine.rotation.x = Math.PI / 2; else if (key === 'od') machine.rotation.x = -Math.PI / 2; else machine.rotation.z = Math.PI / 2;   // 其余工序：局部 +X（接触方向）朝上，轴线水平
+  const clip = new THREE.Plane(side || key === 'od' ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(0, 0, -1), 0);   // 剖切面都过轴线
   const steel = new THREE.MeshStandardMaterial({ color: 0xd3d9e2, metalness: 0.72, roughness: 0.26, envMapIntensity: 1.3 });
   const steelBack = new THREE.MeshStandardMaterial({ color: 0xb9473f, metalness: 0.2, roughness: 0.6, side: THREE.BackSide });
   const wheelMat = new THREE.MeshStandardMaterial({ map: grainTexture('#c8b38f', ['#8a7556', '#e9dcc0', '#6f5d42']), roughness: 0.92, metalness: 0 });
@@ -439,7 +440,11 @@ function mountV3(host, ringType, key) {
   const xrayMats = [];   // 可切换透视的材质，userData.op = 透视时的不透明度
   const xr = (m, op) => { m.userData.op = op; xrayMats.push(m); return m; };
   const chuckMat = xr(new THREE.MeshStandardMaterial({ color: 0x3a404c, metalness: 0.7, roughness: 0.4 }), 0.55);
-  const chuck = () => { const c = new THREE.Mesh(new THREE.CylinderGeometry(ringType === 'inner' ? 34 : 47, ringType === 'inner' ? 34 : 47, 6, 96), chuckMat); c.position.y = -14; machine.add(c); addLabel(new THREE.Vector3(-(ringType === 'inner' ? 34 : 47), -15, 0), L('靠山（端面支撑，电磁吸住）', 'face backing plate (magnetic)')); };
+  const chuck = () => {
+    const ri = ringType === 'inner' ? 24 : 37, ro = ringType === 'inner' ? 33 : 46.5, sh = new THREE.Shape(), hole = new THREE.Path();
+    sh.absarc(0, 0, ro, 0, Math.PI * 2, false); hole.absarc(0, 0, ri, 0, Math.PI * 2, true); sh.holes.push(hole);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 6, bevelEnabled: false, curveSegments: 96 }); g.rotateX(-Math.PI / 2);
+    const c = new THREE.Mesh(g, chuckMat); c.position.y = -17; machine.add(c); addLabel(new THREE.Vector3(-(ringType === 'inner' ? 34 : 47), -15, 0), L('靠山（端面支撑，电磁吸住）', 'face backing plate (magnetic)')); };
   // 支撑头（红）顶住外圆或沟道，装在支撑板（深灰）上
   const plateMat = new THREE.MeshStandardMaterial({ color: 0x4a515e, metalness: 0.6, roughness: 0.45 });
   const shoes = (r, angDeg, shoeTxt) => {
@@ -549,19 +554,28 @@ function mountV3(host, ringType, key) {
       motion = t => { const a = t * 0.25; cg.rotation.y = -a; feed.forEach(g => { const b = g.userData.a0 + a; g.position.set(CC.x + Rp * Math.cos(b), 0, CC.z + Rp * Math.sin(b)); g.rotation.y = t * 1.2; }); };
       addLabel(new THREE.Vector3(CC.x, 6, -Rp - rr - 10), L('送料盘（圆盘送料：带着工件转着穿过两砂轮之间）', 'rotary carrier (rings swept between the wheels)'));
     } else {
-      // 贯穿送料：工件排成一列，沿导轨直线穿过两砂轮之间
-      const X0 = -20, n = 9, pitch = 2 * rr + 6;
-      [-1, 1].forEach(s => { const rail = new THREE.Mesh(new THREE.BoxGeometry(4, 6, 900), darkMetal); rail.position.set(X0 + s * (rr + 3), 0, 0); machine.add(rail); });
-      for (let j = 0; j < n; j++) { const g = mk(); g.userData.z0 = j * pitch; }
-      motion = t => { const L0 = n * pitch; feed.forEach(g => { g.position.set(X0, 0, ((g.userData.z0 + t * 40) % L0) - L0 / 2); }); };
-      addLabel(new THREE.Vector3(X0, 6, 380), L('导轨（贯穿送料：排成一列直线穿过）', 'guide rails (through-feed: in a line)'));
+      // 贯穿送料：倾斜料道。工件立着（端面朝两片砂轮），靠外圆在料道上从右上滚进、左下滚出
+      // 局部 x = 世界上下，局部 z = 屏幕左右（镜头顺着砂轮轴线看，局部 z 负 = 右边）
+      const A = 10 * Math.PI / 180, Z0 = -440, Z1 = 440, xc = z => -85 - z * Math.tan(A);
+      const len = (Z1 - Z0) / Math.cos(A), pitch = 2 * rr + 2, n = Math.floor(len / pitch);
+      const dir = new THREE.Vector3(-Math.sin(A), 0, Math.cos(A)), nrm = new THREE.Vector3(-Math.cos(A), 0, -Math.sin(A));   // 沿料道向下 / 料道面法向（朝下）
+      const mid = new THREE.Vector3(xc(0), 0, 0);
+      const track = new THREE.Mesh(new THREE.BoxGeometry(6, 16, len + 40), darkMetal); track.position.copy(mid).addScaledVector(nrm, rr + 3); track.rotation.y = -A; machine.add(track);
+      // 两侧挡板：只在砂轮外面（进料段、出料段），砂轮中间由两片砂轮自己挡住
+      [[-1, Z0, -300], [1, 300, Z1]].forEach(([, za, zb]) => { const zm = (za + zb) / 2, l = (zb - za) / Math.cos(A);
+        [-1, 1].forEach(sd => { const gd = new THREE.Mesh(new THREE.BoxGeometry(rr * 1.3, 2, l), darkMetal); gd.position.set(xc(zm) - rr * 0.2, sd * 12, zm); gd.rotation.y = -A; machine.add(gd); }); });
+      for (let j = 0; j < n; j++) { const g = mk(); g.userData.s0 = j * pitch; }
+      motion = t => { feed.forEach(g => { const d = (g.userData.s0 + t * 45) % (n * pitch), z = Z0 + d * Math.cos(A); g.position.set(xc(z), 0, z); g.rotation.y = -d / rr; }); };
+      addLabel(new THREE.Vector3(xc(Z0 + 60) + rr + 14, 0, Z0 + 60), L('料道（倾斜）：工件从右上滚进', 'inclined chute: rings roll in, top right'));
+      addLabel(new THREE.Vector3(xc(Z1 - 60) - rr - 20, 0, Z1 - 60), L('从左下滚出', 'and roll out, bottom left'));
     }
     // 火花：两片砂轮都在磨，从每个处于砂轮之间的工件的两个端面同时喷出
     emitters = () => { const out = []; feed.forEach(g => { const dx = g.position.x - WC.x, dz = g.position.z - WC.z, d = Math.hypot(dx, dz); if (d > 300 - rr) return;
       [10, -10].forEach(y => { const s = y > 0 ? 1 : -1; out.push({ p: new THREE.Vector3(g.position.x + (Math.random() - .5) * rr * 1.4, y + s * 0.3, g.position.z + (Math.random() - .5) * rr * 1.4), t: new THREE.Vector3(-dz / d * s, s * 0.35, dx / d * s) }); }); }); return out; };
-    noz(new THREE.Vector3(80, 34, -150), new THREE.Vector3(-10, 10.5, -60), 'main', L('砂轮 1 磨削液', 'coolant, wheel 1'));
-    noz(new THREE.Vector3(80, -34, -150), new THREE.Vector3(-10, -10.5, -60), 'main', L('砂轮 2 磨削液', 'coolant, wheel 2'));
-    addLabel(new THREE.Vector3(-10, 0, 60), L('两个端面同时磨（红色 = 正在磨的端面）', 'both faces ground at once (red = faces being ground)'), 'r');
+    const thru = FACE_MODE === 'thru', nz0 = thru ? new THREE.Vector3(40, 0, -300) : new THREE.Vector3(80, 0, -150), nzT = thru ? new THREE.Vector3(-40, 0, -250) : new THREE.Vector3(-10, 0, -60);
+    noz(nz0.clone().setY(34), nzT.clone().setY(10.5), 'main', L('砂轮 1 磨削液', 'coolant, wheel 1'));
+    noz(nz0.clone().setY(-34), nzT.clone().setY(-10.5), 'main', L('砂轮 2 磨削液', 'coolant, wheel 2'));
+    addLabel(thru ? new THREE.Vector3(-85, 0, 0) : new THREE.Vector3(-10, 0, 60), L('两个端面同时磨（红色 = 正在磨的端面）', 'both faces ground at once (red = faces being ground)'), 'r');
     addLabel(new THREE.Vector3(-120, gap + Tw, 140), L('端面砂轮 1（Ø600 级）', 'disc wheel 1 (~Ø600)')); addLabel(new THREE.Vector3(-120, -gap - Tw, 140), L('端面砂轮 2', 'disc wheel 2'));
   } else if (key === 'od') {
     const Rg = 250, Rr = 165, Wd = 200;
@@ -569,7 +583,7 @@ function mountV3(host, ringType, key) {
     const rw = new THREE.Mesh(new THREE.CylinderGeometry(Rr, Rr, Wd, 128), rubber); rw.position.set(45 + Rr + 0.2, 0, -10); rw.rotation.z = 0.05; machine.add(rw); spin.push([rw, 'y', -1.5]);
     const blade = new THREE.Mesh(new THREE.BoxGeometry(24, 220, 60), darkMetal); blade.position.set(0, 0, -45 - 31); machine.add(blade);
     work.position.z = 0;
-    contact = new THREE.Vector3(-45, 0, 0); tangent = new THREE.Vector3(0, 0, 1);
+    contact = new THREE.Vector3(-45, 0, 0); tangent = new THREE.Vector3(0, 0, -1);
     [-80, -40, 0, 40, 80].forEach((y, i) => noz(new THREE.Vector3(-62, y, 60), new THREE.Vector3(-47, y, 6), 'main', i === 2 ? L('扁平宽喷嘴：覆盖整个砂轮宽度', 'flat wide nozzle across the wheel width') : ''));
     noz(new THREE.Vector3(-295, 0, 290), new THREE.Vector3(-295, 0, 244), 'clean', L('砂轮清洗喷嘴', 'wheel-cleaning nozzle'));
     motion = t => { work.position.y = -90 + ((t * 18) % 180); };
@@ -583,11 +597,11 @@ function mountV3(host, ringType, key) {
   sparkGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
   const sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ color: 0xffa040, size: key === 'face' ? 3 : 1.4, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
   for (let i = 0; i < NS; i++) { sv.push(new THREE.Vector3()); sl[i] = -1; sp[i * 3 + 1] = 9999; }
-  const PER = 90, NF = PER * Math.max(1, nozzles.length), fluidGeo = new THREE.BufferGeometry(), fp = new Float32Array(NF * 3), fl = new Float32Array(NF), fc = new Float32Array(NF * 3);
+  const PER = 240, NF = PER * Math.max(1, nozzles.length), fluidGeo = new THREE.BufferGeometry(), fp = new Float32Array(NF * 3), fl = new Float32Array(NF), fc = new Float32Array(NF * 3);
   const KC = { main: [0.23, 0.6, 1], clean: [0.55, 0.9, 1], oil: [0.88, 0.69, 0.13] };
-  nozzles.forEach((n, k) => { for (let i = 0; i < PER; i++) { fl[k * PER + i] = i / PER; fc.set(KC[n.kind], (k * PER + i) * 3); } });
+  nozzles.forEach((n, k) => { for (let i = 0; i < PER; i++) { fl[k * PER + i] = i / PER * 1.18; fc.set(KC[n.kind], (k * PER + i) * 3); } });
   fluidGeo.setAttribute('position', new THREE.BufferAttribute(fp, 3)); fluidGeo.setAttribute('color', new THREE.BufferAttribute(fc, 3));
-  const fluidPts = new THREE.Points(fluidGeo, new THREE.PointsMaterial({ size: 1.7, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false }));
+  const fluidPts = new THREE.Points(fluidGeo, new THREE.PointsMaterial({ size: key === 'od' || key === 'face' ? 10 : 2.6, vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false }));
   if (key !== 'sf') machine.add(sparks); machine.add(fluidPts);
   const nozMat = new THREE.MeshStandardMaterial({ color: 0x8fa0b8, metalness: 0.6, roughness: 0.4 });
   nozzles.forEach(n => { const nz = new THREE.Mesh(new THREE.CylinderGeometry(n.kind === 'clean' ? 1.8 : 2.6, n.kind === 'clean' ? 2.6 : 3.4, 12, 16), nozMat); nz.position.copy(n.p); nz.lookAt(n.to); nz.rotateX(Math.PI / 2); machine.add(nz);
@@ -595,8 +609,8 @@ function mountV3(host, ringType, key) {
 
   // ── 相机（拖动旋转、滚轮缩放）──
   const big = key === 'groove' && ringType === 'inner', og = key === 'groove' && ringType === 'outer';
-  const sfv = key === 'sf';
-  const view = { th: big || og ? -0.5 : key === 'od' ? 1.45 : key === 'face' ? 0.28 : sfv ? (ringType === 'inner' ? -0.6 : -1.3) : -0.85, ph: sfv && ringType === 'outer' ? 0.62 : big || og ? 0.42 : key === 'od' ? 0.12 : key === 'face' ? 0.3 : 0.38, d: sfv ? (ringType === 'inner' ? 190 : 235) : big ? 250 : og ? 220 : key === 'od' ? 950 : key === 'face' ? 820 : 250, tgt: new THREE.Vector3(big ? 42 : og ? 22 : 0, sfv ? (ringType === 'inner' ? 34 : -24) : big ? 0 : key === 'face' ? -70 : 12, 0) };
+  const sfv = key === 'sf', ft = key === 'face' && FACE_MODE === 'thru';
+  const view = { th: big || og ? -0.5 : key === 'od' ? 0.45 : ft ? 1.2 : key === 'face' ? 0.28 : sfv ? (ringType === 'inner' ? -0.6 : -1.3) : -0.85, ph: sfv && ringType === 'outer' ? 0.62 : big || og ? 0.42 : key === 'od' ? 0.22 : ft ? 0.22 : key === 'face' ? 0.3 : 0.38, d: sfv ? (ringType === 'inner' ? 190 : 235) : big ? 250 : og ? 220 : key === 'od' ? 1150 : ft ? 1050 : key === 'face' ? 820 : 250, tgt: new THREE.Vector3(big ? 42 : og ? 22 : key === 'od' ? -80 : 0, sfv ? (ringType === 'inner' ? 34 : -24) : big ? 0 : key === 'od' ? 0 : ft ? -90 : key === 'face' ? -70 : 12, 0) };
   const placeCam = () => { camera.position.set(view.tgt.x + view.d * Math.cos(view.ph) * Math.sin(view.th), view.tgt.y + view.d * Math.sin(view.ph), view.tgt.z + view.d * Math.cos(view.ph) * Math.cos(view.th)); camera.lookAt(view.tgt); };
   placeCam();
   const el = renderer.domElement; let drag = null;
@@ -644,9 +658,11 @@ function mountV3(host, ringType, key) {
           sp[i * 3] += sv[i].x * dt; sp[i * 3 + 1] += sv[i].y * dt; sp[i * 3 + 2] += sv[i].z * dt; if (sl[i] <= 0) sp[i * 3 + 1] = 9999; }
         sparkGeo.attributes.position.needsUpdate = true;
       }
-      nozzles.forEach((n, k) => { const sprd = n.kind === 'clean' ? 0.6 : 1.4;
-        for (let j = 0; j < PER; j++) { const i = k * PER + j; fl[i] = (fl[i] + dt * (n.kind === 'clean' ? 2.6 : 1.6)) % 1; const u = fl[i]; wv.copy(n.p).lerp(n.to, u);
-          fp[i * 3] = wv.x + Math.sin(i * 7.1) * sprd * u; fp[i * 3 + 1] = wv.y + Math.cos(i * 3.3) * sprd * u; fp[i * 3 + 2] = wv.z + Math.sin(i * 2.7) * sprd * u; } });
+      // 液流：从喷嘴扇形喷出，到目标点后继续冲一小段并溅开（u > 1 的部分）
+      nozzles.forEach((n, k) => { const sprd = (n.kind === 'clean' ? 1.6 : 4.5) * (key === 'od' || key === 'face' ? 3 : 1);
+        for (let j = 0; j < PER; j++) { const i = k * PER + j; fl[i] = (fl[i] + dt * (n.kind === 'clean' ? 2.4 : 1.5)) % 1.18; const u = fl[i]; wv.copy(n.p).lerp(n.to, u);
+          const a = u < 1 ? sprd * u : sprd * (1 + (u - 1) * 22);
+          fp[i * 3] = wv.x + Math.sin(i * 7.1) * a; fp[i * 3 + 1] = wv.y + Math.cos(i * 3.3) * a; fp[i * 3 + 2] = wv.z + Math.sin(i * 2.7) * a; } });
       if (nozzles.length) fluidGeo.attributes.position.needsUpdate = true;
     }
     renderer.render(scene, camera);

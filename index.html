@@ -156,6 +156,13 @@ canvas{display:block;width:100%}
 .v3host canvas{display:block}
 .v3bar{position:absolute;right:10px;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;pointer-events:none}.v3bar>*{pointer-events:auto} .v3bar .seg{background:var(--glass-2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)} .v3bar .seg button{color:var(--ink)} .v3bar .seg button[aria-pressed="true"]{color:var(--accent-ink)}
 .v3tip{position:absolute;left:12px;bottom:8px;font-size:11px;color:var(--muted);pointer-events:none}
+.v3fs{position:absolute;right:10px;bottom:10px;background:var(--glass-2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+/* 全屏：浏览器原生全屏，或者不支持时用铺满窗口的替代样式 */
+.v3wrap:fullscreen,.v3wrap.fs{margin:0;background:#e6ecf4}
+.v3wrap.fs{position:fixed;inset:0;z-index:1000}
+.v3wrap:fullscreen .v3host,.v3wrap.fs .v3host{height:100vh;height:100dvh;border-radius:0;border:0}
+:root[data-theme="dark"] .v3wrap:fullscreen,:root[data-theme="dark"] .v3wrap.fs{background:#10131a}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .v3wrap:fullscreen,:root:not([data-theme="light"]) .v3wrap.fs{background:#10131a} }
 .v3lab{position:absolute;inset:0;pointer-events:none}
 .v3lab span{position:absolute;transform:translate(-50%,-130%);white-space:nowrap;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:rgba(255,255,255,.82);color:#1b2333;border:1px solid rgba(0,0,0,.12);box-shadow:0 2px 8px rgba(0,0,0,.15)}
 .v3lab span.r{color:#c0281f} .v3lab span.b{color:#1f6fd0} .v3lab span.o{color:#9a6c00} .v3lab span.w{color:#1b2333;background:rgba(220,235,255,.9)}
@@ -296,6 +303,7 @@ const PROF_OR = [[44.4,-10],[45,-9.4],[45,9.4],[44.4,10],[38.85,10],[38.25,9.4],
 const GROOVE = { inner: { rb: 28.02, rc: 34.52 }, outer: { rb: 41.98, rc: 35.48 } };   // 沟底半径、沟曲率中心半径
 const V3 = { r: null };
 let V3LBL = store.get('gl-lbl') !== '0';   // 3D 文字标签显示开关
+let V3SUP = store.get('gl-sup') !== '0';   // 支撑显示开关：靠山、支撑头、支撑板、压轮、定心轴
 let V3XRAY = store.get('gl-xray') === '1';   // 透视开关：靠山、端面砂轮、送料盘半透明（默认实体）
 
 function v3ok() { return typeof THREE !== 'undefined'; }
@@ -436,7 +444,8 @@ function mountV3(host, ringType, key) {
   let contact = null, tangent = null, fluid = 'water', motion = () => {}, emitters = null;
   const nozzles = [];   // { p: 喷嘴位置, to: 喷向的点, kind: main 主喷嘴 / clean 砂轮清洗 / oil 超精油, follow: 目标跟着工件动 }
   const noz = (p, to, kind, label, follow) => nozzles.push({ p, to, kind, label, follow });
-  const addLabel = (pos, text, cls) => anchors.push({ pos, text, cls });
+  const addLabel = (pos, text, cls, sup) => anchors.push({ pos, text, cls, sup });
+  const supObjs = new Set(), sup = o => { supObjs.add(o); machine.add(o); return o; };   // 支撑类零件，可以整体隐藏
   const xrayMats = [];   // 可切换透视的材质，userData.op = 透视时的不透明度
   const xr = (m, op) => { m.userData.op = op; xrayMats.push(m); return m; };
   const chuckMat = xr(new THREE.MeshStandardMaterial({ color: 0x3a404c, metalness: 0.7, roughness: 0.4 }), 0.55);
@@ -444,15 +453,46 @@ function mountV3(host, ringType, key) {
     const ri = ringType === 'inner' ? 24 : 37, ro = ringType === 'inner' ? 33 : 46.5, sh = new THREE.Shape(), hole = new THREE.Path();
     sh.absarc(0, 0, ro, 0, Math.PI * 2, false); hole.absarc(0, 0, ri, 0, Math.PI * 2, true); sh.holes.push(hole);
     const g = new THREE.ExtrudeGeometry(sh, { depth: 6, bevelEnabled: false, curveSegments: 96 }); g.rotateX(-Math.PI / 2);
-    const c = new THREE.Mesh(g, chuckMat); c.position.y = -17; machine.add(c); addLabel(new THREE.Vector3(-(ringType === 'inner' ? 34 : 47), -15, 0), L('靠山（端面支撑，电磁吸住）', 'face backing plate (magnetic)')); };
+    const c = new THREE.Mesh(g, chuckMat); c.position.y = -17; sup(c); addLabel(new THREE.Vector3(-(ringType === 'inner' ? 34 : 47), -15, 0), L('靠山（端面支撑，电磁吸住）', 'face backing plate (magnetic)'), '', 1); };
   // 支撑头（红）顶住外圆或沟道，装在支撑板（深灰）上
   const plateMat = new THREE.MeshStandardMaterial({ color: 0x4a515e, metalness: 0.6, roughness: 0.45 });
   const shoes = (r, angDeg, shoeTxt) => {
-    angDeg.forEach((a, i) => { const s = new THREE.Mesh(new THREE.BoxGeometry(6, 14, 10), red); const t = a * Math.PI / 180; s.position.set((r + 3) * Math.cos(t), 0, (r + 3) * Math.sin(t)); s.rotation.y = -t; machine.add(s); if (!i) addLabel(s.position.clone(), shoeTxt || L('支撑头', 'support shoe'), 'r'); });
+    angDeg.forEach((a, i) => { const s = new THREE.Mesh(new THREE.BoxGeometry(6, 14, 10), red); const t = a * Math.PI / 180; s.position.set((r + 3) * Math.cos(t), 0, (r + 3) * Math.sin(t)); s.rotation.y = -t; sup(s); if (!i) addLabel(s.position.clone(), shoeTxt || L('支撑头', 'support shoe'), 'r', 1); });
     const m = (angDeg[0] + angDeg[angDeg.length - 1]) / 2 * Math.PI / 180, half = (angDeg[angDeg.length - 1] - angDeg[0]) / 2 * Math.PI / 180;
     const rc = (r + 3) * Math.cos(half) + 7, len = 2 * (r + 3) * Math.sin(half) + 16;
-    const pl = new THREE.Mesh(new THREE.BoxGeometry(8, 16, len), plateMat); pl.position.set(rc * Math.cos(m), 0, rc * Math.sin(m)); pl.rotation.y = -m; machine.add(pl);
-    addLabel(new THREE.Vector3((rc + 6) * Math.cos(m), -6, (rc + 6) * Math.sin(m)), L('支撑板', 'shoe plate'));
+    const pl = new THREE.Mesh(new THREE.BoxGeometry(8, 16, len), plateMat); pl.position.set(rc * Math.cos(m), 0, rc * Math.sin(m)); pl.rotation.y = -m; sup(pl);
+    addLabel(new THREE.Vector3((rc + 6) * Math.cos(m), -6, (rc + 6) * Math.sin(m)), L('支撑板', 'shoe plate'), '', 1);
+  };
+  // 压轮：两个 6203 轴承（Ø40 × Ø17 × 12），压在正面端面的左右两侧，轮轴沿径向，把套圈压紧在背面的靠山上
+  const brgMat = new THREE.MeshStandardMaterial({ color: 0xd9dee6, metalness: 0.85, roughness: 0.22 });
+  const shieldMat = new THREE.MeshStandardMaterial({ color: 0x2b2f36, metalness: 0.5, roughness: 0.45 });
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x2f7d5b, metalness: 0.45, roughness: 0.4 });
+  const tube = (ri, ro, w, mat) => { const sh = new THREE.Shape(), h = new THREE.Path(); sh.absarc(0, 0, ro, 0, Math.PI * 2, false); h.absarc(0, 0, ri, 0, Math.PI * 2, true); sh.holes.push(h);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 48 }); g.translate(0, 0, -w / 2); return new THREE.Mesh(g, mat); };
+  const rod3 = (a, b, r, mat) => { const v = b.clone().sub(a), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, v.length(), 20), mat);
+    m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.normalize()); return m; };
+  const pressRollers = wRing => {
+    // 压臂是一个叉子（用户手绘的形状）：一根手柄沿套圈轴线从正面伸过来，前端一根横梁（左右方向），
+    // 横梁两头各有一个叉脚朝套圈端面伸出，叉脚上各装一个 6203 压轮。内外圈装法完全一样，都沿轴向压入。
+    const rm = ringType === 'inner' ? 28.4 : 41.6, R = 20, Yc = 10 + R + 0.3, Yb = 82, zp = rm + 13;
+    const pg = new THREE.Group(); sup(pg);
+    [-1, 1].forEach((sd, i) => {
+      const c = new THREE.Vector3(0, Yc, sd * rm);
+      // 6203：外圈（转）+ 防尘盖 + 内圈（固定在轴上）
+      const spinG = new THREE.Group(); spinG.position.copy(c); pg.add(spinG);
+      spinG.add(tube(16.4, 20, 12, brgMat)); [-1, 1].forEach(f => { const d = tube(12.2, 16.6, 0.8, shieldMat); d.position.z = f * 5.6; spinG.add(d); });
+      const inR = tube(8.5, 12.4, 12, brgMat); inR.position.copy(c); pg.add(inR);
+      const axle = new THREE.Mesh(new THREE.CylinderGeometry(8.4, 8.4, 22, 24), darkMetal); axle.rotation.x = Math.PI / 2; axle.position.set(0, Yc, sd * (rm + 5)); pg.add(axle);
+      // 叉脚：从横梁伸到压轮轴
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(16, Yb - Yc + 10, 7), armMat); leg.position.set(0, (Yb + Yc) / 2, sd * zp); pg.add(leg);
+      spin.push([spinG, 'z', sd * wRing * rm / R]);
+      if (!i) addLabel(new THREE.Vector3(0, Yc - 4, sd * (rm - 10)), L('压轮（6203 轴承）', 'pressure roller (6203 bearing)'), '', 1);
+    });
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(16, 12, 2 * zp + 7), armMat); bar.position.set(0, Yb, 0); pg.add(bar);   // 横梁
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(12, 120, 12), armMat); handle.position.set(0, Yb + 66, 0); pg.add(handle);   // 手柄（沿轴向）
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 30, 32), darkMetal); cyl.position.set(0, Yb + 140, 0); pg.add(cyl);   // 压紧缸
+    pg.add(new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, Yb + 100, 22), 34, 0xe5342b, 8, 6));
+    addLabel(new THREE.Vector3(0, Yb + 25, 0), L('压臂（沿轴向压入，两个叉脚各装一个压轮）', 'pressure fork (pushed in axially, a roller on each leg)'), '', 1);
   };
   const rOD = ringType === 'inner' ? 31.75 : 45;
 
@@ -513,24 +553,29 @@ function mountV3(host, ringType, key) {
     const sfG = new THREE.Group(); sfG.rotation.y = inner ? 0 : Math.PI; machine.add(sfG);   // 外圈：转到下方
     const F = v => inner ? v : v.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
     const piv = new THREE.Group(); piv.position.set(gc, 0, 0); piv.add(stone); sfG.add(piv);
-    const holdMat = new THREE.MeshStandardMaterial({ color: inner ? 0xb8673a : 0x2a5a9a, metalness: 0.35, roughness: 0.4 });
+    const holdMat = new THREE.MeshStandardMaterial({ color: 0x2a5a9a, metalness: 0.35, roughness: 0.4 });
     // 油石夹：夹住油石后半段的方形夹头 + 一根加压杆（沿径向，压力 P 从这里施加）
     const clamp = new THREE.Mesh(new THREE.BoxGeometry(14, 2 * hw + 6, thick + 6), holdMat); clamp.position.set(dir * (Ls - 7), 0, 0); piv.add(clamp);
     const screw = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, thick + 10, 12), darkMetal); screw.rotation.x = Math.PI / 2; screw.position.set(dir * (Ls - 7), 0, 0); piv.add(screw);
-    // 加压杆：内圈从外面径向伸出；外圈要从敞开的一端（轴向）伸进圈内
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 60, 24), holdMat);
-    if (inner) { rod.rotation.z = Math.PI / 2; rod.position.set(Ls + 30, 0, 0); } else { rod.position.set(-(Ls - 7), 36, 0); }
-    piv.add(rod);
+    // 加压杆：内外圈一样，从夹头沿轴向往正面伸出（外圈正好从敞开的一端伸进圈内）
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 60, 24), holdMat); rod.position.set(dir * (Ls - 7), 36, 0); piv.add(rod);
     const pa = new THREE.ArrowHelper(new THREE.Vector3(-dir, 0, 0), new THREE.Vector3(dir * (Ls + 12), 0, 14), 16, 0xe5342b, 6, 4); piv.add(pa);
     // 摆动轴示意：过曲率中心、垂直于套圈轴线
     const axisM = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 40, 8), new THREE.MeshBasicMaterial({ color: 0x3a8bff })); axisM.rotation.x = Math.PI / 2; axisM.position.set(gc, 0, 0); sfG.add(axisM);
-    chuck(); shoes(rOD, [160, 200]);
+    chuck();
+    if (inner) {
+      const mand = sup(new THREE.Mesh(new THREE.CylinderGeometry(24.9, 24.9, 24, 64), darkMetal)); mand.position.y = 1.5;
+      const nose = sup(new THREE.Mesh(new THREE.CylinderGeometry(22, 24.9, 3, 64), darkMetal)); nose.position.y = 15;
+      const shaft = sup(new THREE.Mesh(new THREE.CylinderGeometry(18, 18, 60, 48), darkMetal)); shaft.position.y = -40;
+      addLabel(new THREE.Vector3(0, 18, 0), L('定心轴（插进内孔定心，沟道不支撑）', 'centring arbor (in the bore; raceway unsupported)'), '', 1);
+    } else shoes(rOD, [160, 200], L('外圆支撑头', 'OD support shoe'));
+    pressRollers(7);   // 压臂沿轴向从正面压入，内外圈一样
     contact = F(new THREE.Vector3(G.rb, 0, 0)); tangent = new THREE.Vector3(0, 0, 1); fluid = 'oil';
     noz(F(new THREE.Vector3(G.rb + dir * 18, 22, 30)), F(new THREE.Vector3(G.rb, 0, 5)), 'oil', L('超精油（两侧浇注）', 'superfinishing oil (both sides)'));
     noz(F(new THREE.Vector3(G.rb + dir * 18, 22, -30)), F(new THREE.Vector3(G.rb, 0, -5)), 'oil', '');
     motion = t => { piv.rotation.z = 0.38 * Math.sin(t * 9); };   // 绕曲率中心摆动
     addLabel(F(new THREE.Vector3(gc + dir * (Ls * 0.45), hw + 2, 0)), L('油石（长条，端部修成沟道圆弧）', 'stone (bar, end shaped to the groove)'));
-    addLabel(F(inner ? new THREE.Vector3(gc + Ls + 30, 0, 10) : new THREE.Vector3(gc - Ls + 7, 50, 0)), L('油石夹 + 加压杆（压力 P）', 'holder + pressure rod (P)'));
+    addLabel(F(new THREE.Vector3(gc + dir * (Ls - 7), 50, 0)), L('油石夹 + 加压杆（压力 P）', 'holder + pressure rod (P)'));
     addLabel(F(new THREE.Vector3(gc, 0, 22)), L('摆动轴（过沟道曲率中心）', 'oscillation axis (groove centre)'), 'b');
   } else if (key === 'face') {
     const Rw = 300, Tw = 65, gap = 10.15;
@@ -610,7 +655,7 @@ function mountV3(host, ringType, key) {
   // ── 相机（拖动旋转、滚轮缩放）──
   const big = key === 'groove' && ringType === 'inner', og = key === 'groove' && ringType === 'outer';
   const sfv = key === 'sf', ft = key === 'face' && FACE_MODE === 'thru';
-  const view = { th: big || og ? -0.5 : key === 'od' ? 0.45 : ft ? 1.2 : key === 'face' ? 0.28 : sfv ? (ringType === 'inner' ? -0.6 : -1.3) : -0.85, ph: sfv && ringType === 'outer' ? 0.62 : big || og ? 0.42 : key === 'od' ? 0.22 : ft ? 0.22 : key === 'face' ? 0.3 : 0.38, d: sfv ? (ringType === 'inner' ? 190 : 235) : big ? 250 : og ? 220 : key === 'od' ? 1150 : ft ? 1050 : key === 'face' ? 820 : 250, tgt: new THREE.Vector3(big ? 42 : og ? 22 : key === 'od' ? -80 : 0, sfv ? (ringType === 'inner' ? 34 : -24) : big ? 0 : key === 'od' ? 0 : ft ? -90 : key === 'face' ? -70 : 12, 0) };
+  const view = { th: big || og ? -0.5 : key === 'od' ? 0.45 : ft ? 1.2 : key === 'face' ? 0.28 : sfv ? (ringType === 'inner' ? -0.95 : -1.3) : -0.85, ph: sfv && ringType === 'outer' ? 0.62 : big || og ? 0.42 : key === 'od' ? 0.22 : ft ? 0.22 : key === 'face' ? 0.3 : 0.38, d: sfv ? (ringType === 'inner' ? 300 : 300) : big ? 250 : og ? 220 : key === 'od' ? 1150 : ft ? 1050 : key === 'face' ? 820 : 250, tgt: new THREE.Vector3(big ? 42 : og ? 22 : key === 'od' ? -80 : 0, sfv ? (ringType === 'inner' ? 18 : -24) : big ? 0 : key === 'od' ? 0 : ft ? -90 : key === 'face' ? -70 : 12, 0) };
   const placeCam = () => { camera.position.set(view.tgt.x + view.d * Math.cos(view.ph) * Math.sin(view.th), view.tgt.y + view.d * Math.sin(view.ph), view.tgt.z + view.d * Math.cos(view.ph) * Math.cos(view.th)); camera.lookAt(view.tgt); };
   placeCam();
   const el = renderer.domElement; let drag = null;
@@ -628,10 +673,12 @@ function mountV3(host, ringType, key) {
 
   const S = V3.r = { lab, renderer, scene, camera, raf: 0, paused: false, cut: false, t: 0, last: 0, view, placeCam };
   // 只看套圈：隐藏刀具、夹具、液流和标签，镜头拉近到工件
-  S.setSolo = on => { S.solo = on; machine.children.forEach(o => { if (o !== work) o.visible = !on; }); work.visible = on || key !== 'face'; lab.style.display = on || !V3LBL ? 'none' : '';
+  S.setSolo = on => { S.solo = on; machine.children.forEach(o => { if (o !== work) o.visible = !on && (V3SUP || !supObjs.has(o)); }); work.visible = on || key !== 'face'; lab.style.display = on || !V3LBL ? 'none' : '';
     if (on) { S.saved = { th: view.th, ph: view.ph, d: view.d, tgt: view.tgt.clone() }; view.th = 0.6; view.ph = 0.45; view.d = ringType === 'inner' ? 170 : 230; view.tgt.set(0, 0, 0); }
     else if (S.saved) { Object.assign(view, { th: S.saved.th, ph: S.saved.ph, d: S.saved.d }); view.tgt.copy(S.saved.tgt); }
     placeCam(); };
+  S.setSup = on => { supObjs.forEach(o => { o.visible = on && !S.solo; }); };
+  S.setSup(V3SUP);
   S.setXray = on => { xrayMats.forEach(m => { m.transparent = on; m.opacity = on ? m.userData.op : 1; m.depthWrite = !on; m.needsUpdate = true; }); };
   S.setXray(V3XRAY);
   S.setCut = on => { S.cut = on; ringBack.visible = on; clipMats.forEach(m => { m.clippingPlanes = on ? [clip] : []; m.needsUpdate = true; }); };
@@ -670,7 +717,7 @@ function mountV3(host, ringType, key) {
     const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
     machine.updateMatrixWorld();
     anchors.forEach((a, i) => { wv.copy(a.pos).applyMatrix4(machine.matrixWorld).project(camera); const s = spans[i];
-      if (wv.z > 1) { s.style.display = 'none'; return; } s.style.display = ''; s.style.left = ((wv.x * 0.5 + 0.5) * w) + 'px'; s.style.top = ((-wv.y * 0.5 + 0.5) * h) + 'px'; });
+      if (wv.z > 1 || (a.sup && !V3SUP)) { s.style.display = 'none'; return; } s.style.display = ''; s.style.left = ((wv.x * 0.5 + 0.5) * w) + 'px'; s.style.top = ((-wv.y * 0.5 + 0.5) * h) + 'px'; });
   };
   S.raf = requestAnimationFrame(loop);
 }
@@ -701,7 +748,9 @@ function stepsOf(ring) {
     motion: r === 'inner'
       ? L('工件高速旋转；油石以一定压力从外面压在沟道上，沿沟道截面圆弧来回摆动；全程喷超精油', 'The ring spins fast; the stone presses on the raceway from outside and oscillates along the groove arc; superfinishing oil is flooded throughout')
       : L('工件高速旋转；油石夹伸进外圈里面，油石压在沟道上沿圆弧来回摆动；全程喷超精油', 'The ring spins fast; the holder reaches inside the outer ring and the stone presses on the raceway, oscillating along the arc; superfinishing oil is flooded throughout'),
-    datum: L('端面靠在靠山上 + 两个支撑头顶住外圆', 'Face on the backing plate + two support shoes on the OD'),
+    datum: r === 'inner'
+      ? L('内孔套在<b>定心轴</b>上定心（沟道不支撑）+ 背面靠山 + 正面两个压轮压紧端面', 'Bore on a <b>centring arbor</b> (raceway unsupported) + back face on the backing plate + two pressure rollers on the front face')
+      : L('外圆支撑头 + 背面靠山 + 正面两个压轮压紧端面', 'OD support shoes + back face on the backing plate + two pressure rollers on the front face'),
     goal: L('降低粗糙度，去掉磨削留下的尖峰和很薄的变质层，形成交叉网纹；<b class="r">基本不改变尺寸和圆度</b>', 'Lower roughness, remove grinding peaks and a very thin affected layer, create a cross-hatch; <b class="r">size and roundness are hardly changed</b>'),
     ctq: ['Ra / Rz', L('表面纹理', 'surface texture'), L('残留磨粒', 'embedded grit'), L('波纹度（高阶）', 'waviness (high order)')],
     why: L('超精只去掉几微米量级，修不了上道的尺寸、圆度和烧伤，所以必须放在最后，并且前面的磨削要先做好。',
@@ -771,23 +820,27 @@ function stepsOf(ring) {
 }
 
 // 后磨支撑（靠山 / 支撑头 / 支撑板）说明卡片
-function suppCard(key) {
+function suppCard(key, ring) {
   const here = key === 'bore'
     ? L('本工序：支撑头顶在<b>已经磨好的沟道</b>上（以沟定孔）。', 'This step: the shoes sit on the <b>finished raceway</b> (bore from raceway).')
+    : key === 'sf' && ring === 'inner'
+    ? L('本工序（内圈超精）：<b>沟道不支撑</b>。内孔套在<b>定心轴</b>上定心，背面贴靠山，正面由<b>两个压轮</b>压紧端面。', 'This step (inner superfinishing): <b>the raceway is not supported</b>. The bore sits on a <b>centring arbor</b>, the back face on the backing plate, and <b>two pressure rollers</b> press the front face.')
+    : key === 'sf'
+    ? L('本工序（外圈超精）：<b>外圆支撑头</b>托住外圆，背面贴靠山，正面由<b>两个压轮</b>压紧端面。', 'This step (outer superfinishing): <b>OD shoes</b> carry the OD, the back face sits on the backing plate, and <b>two pressure rollers</b> press the front face.')
     : L('本工序：支撑头顶在<b>外圆</b>上。', 'This step: the shoes sit on the <b>OD</b>.');
   const ul = a => `<ul style="margin:6px 0 0;padding-left:18px;line-height:1.7">${a.map(t => `<li>${t}</li>`).join('')}</ul>`;
   return `<div class="glass card"><h2>${L('后磨的支撑：靠山 · 支撑头 · 支撑板', 'Supports after heat treatment: backing plate · shoes · shoe plate')} ${GEN()}</h2><div class="explain">${L(
     '热处理后的磨削（小沟、内径、大沟、超精）都靠这套支撑来定位：' + ul([
       '<b>靠山</b>：端面支撑。套圈端面贴在靠山上，电磁吸住，定住轴向位置。所以端面要第一道磨平、磨平行。',
       '<b style="color:var(--red)">支撑头</b>：顶住外圆或沟道，定住径向位置（图里红色的两块）。',
-      '<b>支撑板</b>：支撑头装在支撑板上，用来调整支撑头的位置和角度。']) +
+      '<b>支撑板</b>：支撑头装在支撑板上，用来调整支撑头的位置和角度。'].concat(key === 'sf' ? ['<b style="color:#2f7d5b">压轮</b>：超精时用两个轴承当压轮（图里是 6203），水平地压在正面端面的左右两侧，装在压臂的两个叉脚上；压臂沿轴向从正面压入，把套圈压紧在靠山上；套圈转时压轮跟着滚。'] : [])) +
     `<div style="margin-top:8px">${here}</div>` +
     '<div style="margin-top:8px"><b>为什么这样定位</b>：套圈靠自己已经磨好的面定位，不用夹紧，薄壁套圈不会被夹变形；上一道磨好的面就是下一道的基准（以外定沟、以沟定孔）。</div>' +
     '<div style="margin-top:8px"><b>要注意</b>：支撑头的位置和角度按工艺调，调不好容易磨出多棱、圆度变差；支撑头会磨损，要定期检查、更换；靠山和支撑头上要干净，夹着磨屑会把套圈顶偏，还会划伤外圆。</div>',
     'All grinding after heat treatment (inner raceway, bore, outer raceway, superfinishing) locates the ring on this support set:' + ul([
       '<b>Backing plate (靠山)</b>: face support. The ring face sits on it, held magnetically, fixing the axial position — which is why the faces are ground flat and parallel first.',
       '<b style="color:var(--red)">Support shoes (支撑头)</b>: bear on the OD or raceway and fix the radial position (the two red blocks).',
-      '<b>Shoe plate (支撑板)</b>: carries the shoes and sets their position and angle.']) +
+      '<b>Shoe plate (支撑板)</b>: carries the shoes and sets their position and angle.'].concat(key === 'sf' ? ['<b style="color:#2f7d5b">Pressure rollers (压轮)</b>: two bearings (6203 here) press the left and right of the front face, mounted on the two legs of a fork pushed in axially from the front, holding the ring against the backing plate; they roll as the ring turns.'] : [])) +
     `<div style="margin-top:8px">${here}</div>` +
     '<div style="margin-top:8px"><b>Why locate this way</b>: the ring locates on its own finished surfaces without clamping, so the thin ring is not squeezed out of shape; each finished surface is the datum for the next step (raceway from OD, bore from raceway).</div>' +
     '<div style="margin-top:8px"><b>Watch out</b>: set shoe position and angle per the process — a poor setting gives lobing and poor roundness; shoes wear and must be checked and replaced; keep the backing plate and shoes clean — trapped swarf pushes the ring off-centre and scratches the OD.</div>')}</div></div>`;
@@ -824,8 +877,30 @@ function twoPassCard() {
       '<div class="note" style="margin-top:6px">Rough and finish passes usually use different wheel grits and feeds; with large distortion or tight tolerances an extra intermediate pass is added. The number of passes and stock split follow your process.</div>')}</div></div>`;
 }
 
+// 动画全屏：优先用浏览器原生全屏（Esc 退出）；不支持的（如 iPhone）就让动画区铺满窗口
+const fsOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement || document.querySelector('.v3wrap.fs'));
+const fsLabel = () => fsOn() ? L('⤡ 退出全屏', '⤡ Exit full screen') : L('⛶ 全屏', '⛶ Full screen');
+function toggleV3Full() {
+  const w = document.querySelector('.v3wrap'); if (!w) return;
+  if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+  if (w.classList.contains('fs')) { fakeFs(w, false); return; }
+  const req = w.requestFullscreen || w.webkitRequestFullscreen;
+  if (req) req.call(w).catch(() => fakeFs(w, true)); else fakeFs(w, true);
+}
+// 替代全屏：玻璃卡片有 backdrop-filter，fixed 定位会被困在卡片里，所以先把动画区挪到 body 下，退出时再放回原位
+function fakeFs(w, on) {
+  if (on) { const ph = document.createComment('v3'); w.parentNode.insertBefore(ph, w); w._ph = ph; document.body.appendChild(w); w.classList.add('fs'); document.body.style.overflow = 'hidden'; }
+  else { w.classList.remove('fs'); document.body.style.overflow = ''; if (w._ph && w._ph.parentNode) { w._ph.parentNode.insertBefore(w, w._ph); w._ph.remove(); } else w.remove(); }
+  fsSync();
+}
+function fsSync() { const b = $('v3fs'); if (b) b.textContent = fsLabel(); if (V3.r) requestAnimationFrame(() => V3.r && V3.r.onResize()); }
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, fsSync));
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.querySelector('.v3wrap.fs')) toggleV3Full(); });
+
 function renderProcess() {
   const S = stepsOf(PR.ring), s = S[PR.step];
+  const old = document.querySelector('.v3wrap.fs'), keepFs = !!old;   // 替代全屏时重画，保持铺满
+  if (old) { if (old._ph) old._ph.remove(); old.remove(); }
   $('pg-process').innerHTML = `
   <div class="g2">
     <div class="glass card">
@@ -838,6 +913,7 @@ function renderProcess() {
         <div class="v3bar">
           ${s.key === 'face' ? seg('fmSeg', [['carrier', L('圆盘送料', 'Rotary carrier')], ['thru', L('贯穿送料', 'Through-feed')]], FACE_MODE) : ''}
           <button class="btn" id="v3lbl">${V3LBL ? L('🏷 隐藏文字', '🏷 Hide labels') : L('🏷 显示文字', '🏷 Show labels')}</button>
+          ${['groove', 'bore', 'sf'].includes(s.key) ? `<button class="btn" id="v3sup">${V3SUP ? L('◫ 隐藏支撑', '◫ Hide supports') : L('◫ 显示支撑', '◫ Show supports')}</button>` : ''}
           <button class="btn" id="v3xray">${V3XRAY ? L('◑ 透视：开', '◑ X-ray: on') : L('◐ 透视：关', '◐ X-ray: off')}</button>
           <button class="btn" id="v3solo">${L('◎ 只看套圈', '◎ Ring only')}</button>
           <button class="btn" id="v3cut">${L('✂ 剖开看截面', '✂ Cut away')}</button>
@@ -845,11 +921,12 @@ function renderProcess() {
           <button class="btn" id="v3reset">${L('↺ 视角复位', '↺ Reset view')}</button>
         </div>
         <div class="v3tip">${L('拖动旋转 · 滚轮缩放', 'drag to rotate · scroll to zoom')}</div>
+        <button class="btn v3fs" id="v3fs">${fsLabel()}</button>
       </div>
       <div class="legend" style="margin-top:6px">
         <span><i style="background:#ff5a2a"></i>${L('本工序加工面', 'machined surface')}</span>
         <span><i style="background:var(--wheel)"></i>${L('砂轮', 'wheel')}</span><span><i style="background:var(--stone)"></i>${L('油石', 'stone')}</span>
-        <span><i style="background:var(--red)"></i>${L('支撑头', 'support shoes')}</span><span><i style="background:#4a515e"></i>${L('支撑板 / 靠山', 'shoe plate / backing plate')}</span>
+        <span><i style="background:var(--red)"></i>${L('支撑头', 'support shoes')}</span><span><i style="background:#2f7d5b"></i>${L('压轮', 'pressure rollers')}</span><span><i style="background:#4a515e"></i>${L('支撑板 / 靠山', 'shoe plate / backing plate')}</span>
         <span><i style="background:var(--cool)"></i>${L('磨削液', 'coolant')}</span><span><i style="background:var(--oil)"></i>${L('超精油', 'superfinishing oil')}</span>
         <span>${L('套圈直接取自 6210 的 Blender 三维模型（d50 × D90 × B20）', 'rings taken directly from the 6210 Blender model (d50 × D90 × B20)')}</span>
       </div>
@@ -867,7 +944,7 @@ function renderProcess() {
         </div>
       </div>
       <div class="glass card"><h2>${L('为什么排在这里', 'Why this position in the sequence')}</h2><div class="explain">${s.why}</div></div>
-      ${s.key === 'od' ? twoPassCard() : ''}${['groove', 'bore', 'sf'].includes(s.key) ? suppCard(s.key) : ''}
+      ${s.key === 'od' ? twoPassCard() : ''}${['groove', 'bore', 'sf'].includes(s.key) ? suppCard(s.key, PR.ring) : ''}
       <div class="glass card"><h2>${L('常见问题', 'Typical problems')}</h2><div class="explain">${s.trouble}<br><span class="note">${L('原因排查见「参数」页的问题反查表。', 'See the troubleshooting table on the Parameters page.')}</span></div></div>
     </div>
   </div>
@@ -881,11 +958,15 @@ function renderProcess() {
       '<b>Inner ring</b>: faces → raceway → bore → superfinish · <b>Outer ring</b>: faces → OD (centerless) → raceway → superfinish.<br>' +
       'After heat treatment the rings are hardened (around 60 HRC) and can only be machined by grinding and superfinishing; heat-treatment distortion (ovality, warpage) must also be removed by the grinding allowance.')}</div>
   </div>`;
+  if (keepFs) { const w = document.querySelector('#pg-process .v3wrap'); const ph = document.createComment('v3'); w.parentNode.insertBefore(ph, w); w._ph = ph; document.body.appendChild(w); w.classList.add('fs'); }
   mountV3($('v3host'), PR.ring, s.key);
   loadRingModels(() => { if (page === 'process') renderProcess(); });   // 模型加载完后用真实网格重画
   $('v3cut').onclick = () => { const S = V3.r; if (!S) return; S.setCut(!S.cut); $('v3cut').textContent = S.cut ? L('◯ 完整显示', '◯ Show whole') : L('✂ 剖开看截面', '✂ Cut away'); };
   $('v3pause').onclick = () => { const S = V3.r; if (!S) return; S.paused = !S.paused; $('v3pause').textContent = S.paused ? L('▶ 继续', '▶ Play') : L('⏸ 暂停', '⏸ Pause'); };
   $('v3reset').onclick = () => renderProcess();
+  $('v3fs').onclick = toggleV3Full;
+  if ($('v3sup')) $('v3sup').onclick = () => { V3SUP = !V3SUP; store.set('gl-sup', V3SUP ? '1' : '0'); if (V3.r) V3.r.setSup(V3SUP);
+    $('v3sup').textContent = V3SUP ? L('◫ 隐藏支撑', '◫ Hide supports') : L('◫ 显示支撑', '◫ Show supports'); };
   $('v3xray').onclick = () => { V3XRAY = !V3XRAY; store.set('gl-xray', V3XRAY ? '1' : '0'); if (V3.r) V3.r.setXray(V3XRAY);
     $('v3xray').textContent = V3XRAY ? L('◑ 透视：开', '◑ X-ray: on') : L('◐ 透视：关', '◐ X-ray: off'); };
   $('v3lbl').onclick = () => { V3LBL = !V3LBL; store.set('gl-lbl', V3LBL ? '1' : '0'); const S = V3.r; if (S && !S.solo) S.lab.style.display = V3LBL ? '' : 'none';
@@ -895,7 +976,7 @@ function renderProcess() {
   bindSeg('ringSeg', v => { PR.ring = v; PR.step = 0; store.set('gl-ring', v); renderProcess(); });
   $('flow').querySelectorAll('.st').forEach(b => b.onclick = () => { PR.step = +b.dataset.i; renderProcess(); });
 }
-PAGES.process = { render: renderProcess, enter() { if (!V3.r && $('v3host')) renderProcess(); }, leave() { disposeV3(); } };
+PAGES.process = { render: renderProcess, enter() { if (!V3.r && $('v3host')) renderProcess(); }, leave() { const w = document.querySelector('.v3wrap.fs'); if (w) fakeFs(w, false); disposeV3(); } };
 
 // ═════════ 结构页：五要素 + 微观结构 + 规格标记 + 常见误解 ═════════
 // 粒度 → 磨粒平均尺寸（近似值）：F 号按 ISO 8486 量级，# 号微粉按 JIS R6001 量级；只用于示意比例
@@ -1983,6 +2064,8 @@ PAGES.params = {
   if (q.get('dm')) DR.m = q.get('dm');
   if (q.get('cl')) CL.kind = q.get('cl');   // 测试用：冷却页介质
   if (q.get('xray')) V3XRAY = q.get('xray') === '1';   // 测试用：透视开关
+  if (q.get('sup')) V3SUP = q.get('sup') === '1';   // 测试用：支撑开关
+  if (q.get('fs')) setTimeout(toggleV3Full, 800);   // 测试用：全屏（无用户手势时走铺满窗口的替代方式）
   if (q.get('fm')) FACE_MODE = q.get('fm');   // 测试用：端面磨送料方式   // 测试用：修整方式
   renderChrome();
   if (q.get('solo')) setTimeout(() => { const t = setInterval(() => { if (V3.r && RING_GEO.tried) { V3.r.setSolo(true); V3.r.setCut(q.get('solo') === 'cut'); clearInterval(t); } }, 100); }, 300);   // 测试用

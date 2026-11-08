@@ -500,7 +500,7 @@ function mountV3(host, ringType, key) {
     // 支撑头式无心磨：套圈由两个支撑头 + 砂轮三点定位，三点都在正在磨的沟道上，所以支撑头顶在沟底。
     // 截面画在 (局部 x, 局部 z) 平面里；局部 −x = 屏幕左，+z = 屏幕下。主体是平的（轴向宽 2W），
     // 只有朝沟底的接触边做成刀口：轴向截面是三角形，尖棱比主体多伸出 B，正好顶到沟底半径 rb，碰不到沟道两侧圆弧和挡边
-    const B = 7, W = 7, r = rb + B;
+    const B = 4.5, W = 7, r = rb + B;   // B 刚好大于挡边高出沟底的量，主体贴近外圆，刀口两侧仍碰不到沟道圆弧和挡边
     const redDS = red.clone(); redDS.side = THREE.DoubleSide;
     const body = pts => { const sh = new THREE.Shape(); sh.moveTo(...pts[0]); pts.slice(1).forEach(q => sh.lineTo(...q)); sh.closePath();
       const g = new THREE.ExtrudeGeometry(sh, { depth: 2 * W, bevelEnabled: false }); g.translate(0, 0, -W); g.rotateX(Math.PI / 2); return new THREE.Mesh(g, red); };
@@ -518,9 +518,9 @@ function mountV3(host, ringType, key) {
     part([[xR - 50, -hh], [xR, -hh], [xR - d, 0], [xR, hh], [xR - 50, hh]], [[1, 2], [2, 3]]);
     addLabel(new THREE.Vector3(xR - 28, 0, -hh - 4), L('V 形支撑头（左）', 'V-notch shoe (left)'), 'r', 1);
     // 下面：宽板，顶端斜切，刀口在顶边上，高的一端顶住沟底
-    const zt = Math.sqrt(r * r - 16);
-    part([[4, zt], [4, r + 60], [-22, r + 60], [-22, zt + 10]], [[3, 0]]);
-    addLabel(new THREE.Vector3(-9, 0, r + 40), L('刀口支撑头（下）', 'knife-edge shoe (below)'), 'r', 1);
+    const xc = 11, zt = Math.sqrt(r * r - xc * xc);   // 接触点在正下方偏右（约 5 点钟方向）
+    part([[xc, zt], [xc, r + 60], [xc - 26, r + 60], [xc - 26, zt + 10]], [[3, 0]]);
+    addLabel(new THREE.Vector3(xc - 13, 0, r + 40), L('刀口支撑头（下）', 'knife-edge shoe (below)'), 'r', 1);
   };
   const rOD = ringType === 'inner' ? 31.75 : 45;
 

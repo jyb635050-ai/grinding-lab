@@ -1427,8 +1427,8 @@ function dressMethods() {
     },
     disc: {
       name: L('金刚碟片（旋转修整盘）', 'Rotary diamond disc'),
-      how: L('薄圆盘外圆一圈电镀或烧结金刚石，由电主轴带着<b>自己旋转</b>。数控轴驱动碟片沿砂轮轮廓走路径（和金刚笔一样靠路径成形），但接触点一直在换，磨损分摊到整圈。',
-        'A thin disc with diamond plated or sintered around its rim, <b>driven to rotate</b> by its own spindle. CNC axes move it along the wheel profile (path-generated, like the pen), but the contact point keeps changing so wear is spread round the rim.'),
+      how: L('薄圆盘外圆一圈电镀或烧结金刚石，<b>竖着装</b>，碟片轴和砂轮轴平行，由电主轴带着<b>自己旋转</b>。从砂轮剖面（或俯视）看，碟片是侧着的一片，刃口顶在砂轮轮廓上，样子和金刚笔一样。数控轴驱动碟片沿砂轮轮廓走路径（和金刚笔一样靠路径成形），但接触点一直在换，磨损分摊到整圈。',
+        'A thin disc with diamond plated or sintered around its rim, <b>mounted upright</b> with its spindle parallel to the wheel spindle and <b>driven to rotate</b>. Seen in the wheel section (or from above) it is edge-on, its rim touching the wheel profile just like a pen tip. CNC axes move it along the wheel profile (path-generated, like the pen), but the contact point keeps changing so wear is spread round the rim.'),
       plus: [L('灵活：一片碟片可以修不同 R、不同轮廓，换型只改程序', 'flexible: one disc dresses many radii and profiles — only the program changes'), L('寿命比金刚笔长得多，轮廓精度和一致性更好', 'far longer life than a pen, better profile accuracy and consistency'), L('可调速比和方向，控制修出来的锋利度', 'speed ratio and direction can be set to tune sharpness')],
       minus: [L('需要数控修整轴和修整电主轴，设备投入高', 'needs CNC dressing axes and a dresser spindle — higher investment'), L('要走路径，修整时间比滚轮长', 'path traversing takes longer than a roll'), L('碟片本身较贵，碰撞或崩边就报废', 'discs are costly and scrapped if chipped or crashed')],
       use: L('沟道成型砂轮，尤其多品种、经常换型的线', 'formed raceway wheels, especially on multi-product lines with frequent changeover')
@@ -1487,11 +1487,19 @@ function drawDress(dt) {
       g.fillStyle = '#8f99aa'; g.fillRect(-6, 6, 12, L0); g.fillStyle = '#bfe9ff'; g.beginPath(); g.moveTo(-6, 6); g.lineTo(6, 6); g.lineTo(0, -2); g.closePath(); g.fill(); g.strokeStyle = '#4aa8d8'; g.stroke(); g.restore();
       g.fillStyle = cssv('--muted'); g.fillText(L('金刚笔：固定不转，沿轮廓一点点走', 'pen: not rotating, traverses the profile'), 12, 18);
     } else {
-      const rd = R * 1.3, dcx = px + nx * rd, dcy = py + ny * rd;
-      g.fillStyle = '#9aa4b4'; g.beginPath(); g.arc(dcx, dcy, rd, 0, 7); g.fill();
-      g.strokeStyle = '#bfe9ff'; g.lineWidth = 5; g.beginPath(); g.arc(dcx, dcy, rd - 2, 0, 7); g.stroke(); g.lineWidth = 1;
-      g.save(); g.translate(dcx, dcy); g.rotate(DR.t * 6); g.strokeStyle = '#555'; g.beginPath(); g.moveTo(0, 0); g.lineTo(rd - 6, 0); g.stroke(); g.restore();
-      g.fillStyle = cssv('--muted'); g.fillText(L('金刚碟片：自己旋转，数控沿轮廓走路径', 'disc: rotates, CNC moves it along the path'), 12, 18);
+      // 碟片竖着装：轴线和砂轮轴平行（图里是水平的），所以这个剖面里碟片是侧着看的——一片竖着的薄片，
+      // 外缘（修成小圆弧、镶金刚石）顶在砂轮轮廓上，样子和金刚笔一样；碟片只平移、不改变朝向
+      const rt = R * 0.22, Hd = R * 1.55, tx = px + nx * rt, ty = py + ny * rt;   // 刃口圆心
+      g.fillStyle = '#9aa4b4'; g.strokeStyle = '#5d6776';
+      g.beginPath(); g.arc(tx, ty, rt, Math.PI, 0); g.lineTo(tx + rt, ty + Hd); g.arc(tx, ty + Hd, rt, 0, Math.PI); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = '#bfe9ff'; g.lineWidth = 5; g.beginPath(); g.arc(tx, ty, rt - 1, Math.PI, 0); g.stroke(); g.beginPath(); g.arc(tx, ty + Hd, rt - 1, 0, Math.PI); g.stroke(); g.lineWidth = 1;
+      // 碟片轴（水平，和砂轮轴平行）+ 修整电主轴
+      const ay = ty + Hd / 2; g.fillStyle = cssv('--steel2'); g.fillRect(tx - R * 1.6, ay - 4, R * 3.2, 8);
+      g.fillStyle = '#5d6776'; g.fillRect(tx + R * 1.6, ay - 12, R * 0.9, 24);
+      g.strokeStyle = cssv('--accent'); g.lineWidth = 2; g.setLineDash([5, 5]); g.lineDashOffset = -DR.t * 40;
+      g.beginPath(); g.ellipse(tx - R * 0.9, ay, 7, Hd / 2 + 4, 0, 0, 7); g.stroke(); g.setLineDash([]); g.lineWidth = 1;
+      g.fillStyle = cssv('--muted'); g.fillText(L('碟片轴（和砂轮轴平行）', 'disc spindle (parallel to wheel spindle)'), tx + R * 2.6, ay + 4);
+      g.fillText(L('金刚碟片：竖着装、轴线和砂轮轴平行；侧面看像金刚笔，自己旋转，数控沿轮廓走路径', 'disc: mounted upright, axis parallel to the wheel; seen side-on like a pen, rotating, moved along the path by CNC'), 12, 18);
     }
   } else {
     // 滚轮：凹 R，整轮廓径向切入

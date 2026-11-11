@@ -560,17 +560,22 @@ function mountV3(host, ringType, key) {
     addLabel(new THREE.Vector3(G.rb + 55, 0, 15), L('砂轮 Ø510 级 × 13（轮缘修成沟道圆弧）', 'wheel ~Ø510 × 13 (rim dressed to groove)'));
     addLabel(new THREE.Vector3(G.rb + Rw - 150, -30, 0), L('法兰盘 + 螺母', 'flanges + nut'));
   } else if (key === 'groove') {
+    // 大沟磨：砂轮在圈内压向左下方——正对着左边和下面两个支撑头之间，磨削力由两个支撑头一起抵住
     const Rw = 30, wheel = new THREE.Mesh(wheelGeom(Rw, 10, 10, 6.8, 6.0), wheelMat);
-    const wg = new THREE.Group(); wg.position.set(G.rb - Rw - 0.15, 0, 0); wg.add(wheel); machine.add(wg);
+    const ca = 160 * Math.PI / 180, ux = Math.cos(ca), uz = Math.sin(ca);   // 接触方向（局部 −x = 左，+z = 下）
+    const rot = (x, y, z) => new THREE.Vector3(x * ux - z * uz, y, x * uz + z * ux);   // 把「接触在 +x」的布置转到接触方向
+    const wg = new THREE.Group(); wg.position.copy(rot(G.rb - Rw - 0.15, 0, 0)); wg.add(wheel); machine.add(wg);
     const nut = new THREE.Mesh(hexNut(11, 7), new THREE.MeshStandardMaterial({ color: 0x9b2a2a, metalness: 0.6, roughness: 0.4 })); nut.position.y = -13.5; wg.add(nut);
     const ax = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 6.5, 160, 32), new THREE.MeshStandardMaterial({ color: 0x2a9a9a, metalness: 0.5, roughness: 0.35 })); ax.position.y = 84; wg.add(ax);
     spin.push([wheel, 'y', 22]); chuck(); ceramicShoes(45, [180, 90]);
-    contact = new THREE.Vector3(G.rb, 0, 0); tangent = new THREE.Vector3(0, 0, -1);
-    noz(new THREE.Vector3(G.rb - 10, 34, 26), new THREE.Vector3(G.rb - 1.5, 0, 7), 'main', L('主喷嘴：从敞开端伸进去，对准楔形入口', 'main nozzle: from the open side into the entry wedge'));
-    noz(new THREE.Vector3(G.rb - 2 * Rw - 14, 30, 0), new THREE.Vector3(G.rb - 2 * Rw + 1, 2, 0), 'clean', L('砂轮清洗喷嘴', 'wheel-cleaning nozzle'));
-    motion = t => { wg.position.x = G.rb - Rw - 0.15 - 1.4 * (0.5 + 0.5 * Math.cos(t * 1.4)); };
-    addLabel(new THREE.Vector3(G.rb - Rw, 0, 22), L('砂轮 Ø60 级 × 20（伸进外圈）', 'wheel ~Ø60 × 20 (inside the ring)'));
-    addLabel(new THREE.Vector3(G.rb - Rw, 70, 0), L('砂轮轴', 'wheel spindle'));
+    contact = rot(G.rb, 0, 0); tangent = rot(0, 0, -1);
+    noz(rot(G.rb - 10, 34, 26), rot(G.rb - 1.5, 0, 7), 'main', L('主喷嘴：从敞开端伸进去，对准楔形入口', 'main nozzle: from the open side into the entry wedge'));
+    noz(rot(G.rb - 2 * Rw - 14, 30, 0), rot(G.rb - 2 * Rw + 1, 2, 0), 'clean', L('砂轮清洗喷嘴', 'wheel-cleaning nozzle'));
+    const pa = new THREE.ArrowHelper(new THREE.Vector3(ux, 0, uz), rot(G.rb - 2 * Rw - 6, 0, 0), 26, 0xe5342b, 8, 6); machine.add(pa);   // 切入方向 = 磨削力方向
+    motion = t => { wg.position.copy(rot(G.rb - Rw - 0.15 - 1.4 * (0.5 + 0.5 * Math.cos(t * 1.4)), 0, 0)); };
+    addLabel(rot(G.rb - Rw, 0, 22), L('砂轮 Ø60 级 × 20（伸进外圈）', 'wheel ~Ø60 × 20 (inside the ring)'));
+    addLabel(rot(G.rb - 2 * Rw + 6, 0, 0), L('砂轮切入方向：压向左下，两个支撑头一起抵住', 'infeed: toward lower left, taken by both shoes'), 'r');
+    addLabel(rot(G.rb - Rw, 70, 0), L('砂轮轴', 'wheel spindle'));
   } else if (key === 'bore') {
     const boreMat = new THREE.MeshStandardMaterial({ map: grainTexture('#8c6f52', ['#5e4934', '#b4987a', '#3f3124']), roughness: 0.95, metalness: 0 });
     const Rw = 20, len = 24, wheel = new THREE.Mesh(new THREE.CylinderGeometry(Rw, Rw, len, 96), boreMat);
@@ -908,7 +913,7 @@ function suppCard(key, ring) {
     : key === 'groove' && ring === 'inner'
     ? L('本工序（小沟磨）：左边一个 <b>V 形支撑头</b>，下面一个<b>刀口支撑头</b>，接触边都做成尖的刀口，<b>顶在沟底</b>；砂轮从右边压过来，V 形支撑头吃住径向力，刀口托住工件。<br><b>为什么顶在沟底</b>：这是支撑头式无心磨，套圈的位置由两个支撑头和砂轮这三个点决定，三个点都在正在磨的沟道上。沟道以它自己为基准，越磨越圆，也不受外圆、挡边误差的影响。<b>为什么做成尖的</b>：只在沟底接触，碰不到沟道两侧的圆弧和挡边，接触位置明确。', 'This step (inner raceway): a <b>V-shaped shoe</b> on the left and a <b>knife-edge shoe</b> below, with knife-edge contact edges <b>bearing on the raceway bottom</b>; the wheel pushes from the right, the V shoe takes the radial force and the knife edge carries the ring.<br><b>Why the raceway bottom</b>: this is shoe-type centerless grinding — the ring is located by three points (two shoes + wheel), all on the raceway being ground, so the raceway references itself, rounds up, and is unaffected by OD or shoulder errors. <b>Why pointed</b>: contact only at the raceway bottom, clear of the groove flanks and shoulders.')
     : key === 'groove' && ring === 'outer'
-    ? L('本工序（大沟磨）：外圆由<b>两个独立的支撑头</b>托住，一个在左、一个在下，<b>相隔 90°</b>，互不相连。' + ceramicNote[0], 'This step (outer raceway): the OD rests on <b>two separate shoes</b>, one on the left and one below, <b>90° apart</b>, not joined.' + ceramicNote[1])
+    ? L('本工序（大沟磨）：外圆由<b>两个独立的支撑头</b>托住，一个在左、一个在下，<b>相隔 90°</b>，互不相连。砂轮在圈内<b>压向左下方</b>，正对着两个支撑头之间，磨削力由两个支撑头一起抵住，套圈不会被推离支撑。' + ceramicNote[0], 'This step (outer raceway): the OD rests on <b>two separate shoes</b>, one on the left and one below, <b>90° apart</b>, not joined. The wheel inside the ring <b>pushes toward the lower left</b>, between the two shoes, so both shoes take the grinding force and the ring is not pushed off them.' + ceramicNote[1])
     : L('本工序：支撑头顶在<b>外圆</b>上。', 'This step: the shoes sit on the <b>OD</b>.');
   const ul = a => `<ul style="margin:6px 0 0;padding-left:18px;line-height:1.7">${a.map(t => `<li>${t}</li>`).join('')}</ul>`;
   return `<div class="glass card"><h2>${L('后磨的支撑：靠山 · 支撑头 · 支撑板', 'Supports after heat treatment: backing plate · shoes · shoe plate')} ${GEN()}</h2><div class="explain">${L(
@@ -1060,6 +1065,152 @@ function renderProcess() {
 }
 PAGES.process = { render: renderProcess, enter() { if (!V3.r && $('v3host')) renderProcess(); }, leave() { const w = document.querySelector('.v3wrap.fs'); if (w) fakeFs(w, false); disposeV3(); } };
 
+// ═════════ 结构页：砂轮放大镜（3D）——从整个砂轮一路放大到一颗磨粒 ═════════
+// 全部按真实尺寸（mm）建模：Ø400 × 40 的直型砂轮；外圆上一块 6 × 6 × 1.6 mm 的区域里放上真实大小的磨粒和结合剂桥。
+// 放大时镜头沿对数距离连续飞向这块区域，不切换场景；放大到能看清内部时，砂轮本体淡出，露出「磨粒 + 结合剂 + 气孔」。
+// 示例规格：白刚玉 WA、F80（磨粒约 0.185 mm）、陶瓷结合剂 V —— 只用于示意，不是本厂规格。
+const ZM = { r: null, v: 0 };
+function disposeZoom() {
+  const S = ZM.r; if (!S) return;
+  cancelAnimationFrame(S.raf); window.removeEventListener('resize', S.onResize);
+  S.renderer.dispose(); S.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  ZM.r = null;
+}
+function zoomStage(z) {
+  return z < 4 ? L('① 整个砂轮：一个圆盘，中间是装砂轮轴的孔。红圈是接下来要放大的位置。', '① The whole wheel: a disc with a bore for the spindle. The red circle marks where we zoom in.')
+    : z < 30 ? L('② 砂轮外圆，就是磨削的工作面。肉眼看是一层细细的砂面。', '② The wheel periphery — the grinding face. To the eye it is a fine sandy surface.')
+    : z < 160 ? L('③ 再放大：工作面上密密麻麻露出的小颗粒就是磨粒，每一颗都是一把小刀。', '③ Closer: the tiny particles sticking out of the face are grains — each one a small cutting tool.')
+    : L('④ 微观结构：白色多棱的晶体是<b>磨粒</b>（尖角就是刃口），琥珀色的连桥是<b>结合剂</b>（把磨粒粘住），中间的空隙是<b>气孔</b>（装切屑、通冷却液）。', '④ Microstructure: white faceted crystals are <b>grains</b> (their corners are the cutting edges), amber bridges are the <b>bond</b> holding them, and the gaps are <b>pores</b> (room for chips and coolant).');
+}
+function fmtLen(mm) { return mm >= 10 ? Math.round(mm) + ' mm' : mm >= 1 ? mm.toFixed(1) + ' mm' : Math.round(mm * 1000) + ' µm'; }
+
+function mountZoom(host) {
+  disposeZoom();
+  if (typeof THREE === 'undefined' || !host) { if (host) host.innerHTML = `<div class="note" style="padding:20px">${L('3D 组件没有加载（需要联网）。', '3D library not loaded (needs internet).')}</div>`; return; }
+  const W = host.clientWidth || 600, H = host.clientHeight || 420;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.setSize(W, H);
+  renderer.outputEncoding = THREE.sRGBEncoding; host.appendChild(renderer.domElement);
+  const scene = new THREE.Scene(); scene.environment = envMap(renderer);
+  const camera = new THREE.PerspectiveCamera(35, W / H, 0.01, 5000);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445066, 0.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.95); scene.add(sun); scene.add(sun.target);
+
+  // ── 砂轮本体：Ø400 × 40，内孔 Ø127，轴线沿 x ──
+  const R = 200, HW = 20, P = new THREE.Vector3(0, 0, R), N = new THREE.Vector3(0, 0, 1);
+  // 表面贴图：一张图代表 20 × 20 mm，按 F80 的大小画磨粒（白）、结合剂（琥珀）、气孔（深色），放大到中倍时和微观块接得上
+  const tc = document.createElement('canvas'); tc.width = tc.height = 1024; const tx = tc.getContext('2d'), tr = rng(7);
+  tx.fillStyle = '#b8a27c'; tx.fillRect(0, 0, 1024, 1024);
+  const ppm = 1024 / 20, nG = Math.round((20 / 0.26) ** 2);   // 随机撒点（规则网格会在斜看时出摩尔纹）
+  for (let n = 0; n < nG * 0.3; n++) { tx.fillStyle = tr() < 0.5 ? '#5d5244' : '#7a6a52'; tx.beginPath(); tx.arc(tr() * 1024, tr() * 1024, 0.06 * ppm * (0.6 + tr()), 0, 7); tx.fill(); }   // 气孔（深色）
+  for (let n = 0; n < nG; n++) { const cx = tr() * 1024, cy = tr() * 1024;
+    tx.fillStyle = '#d0a462'; tx.beginPath(); tx.arc(cx, cy, 0.12 * ppm, 0, 7); tx.fill();   // 结合剂
+    tx.fillStyle = ['#f4f6fa', '#e6e9ef', '#ffffff'][Math.floor(tr() * 3)]; tx.beginPath(); const k6 = 6, a0 = tr() * 6;
+    for (let k = 0; k < k6; k++) { const ag = a0 + k / k6 * 6.283, rr = 0.09 * ppm * (0.75 + tr() * 0.5); k ? tx.lineTo(cx + Math.cos(ag) * rr, cy + Math.sin(ag) * rr) : tx.moveTo(cx + Math.cos(ag) * rr, cy + Math.sin(ag) * rr); }
+    tx.closePath(); tx.fill(); }
+  const tex = new THREE.CanvasTexture(tc); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 8;
+  // 外圆（工作面）和两个侧面分开建，各自的贴图比例都对：外圆一格贴图 = 20 × 20 mm
+  const wheelMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0, transparent: true });
+  const sideTex = grainTexture('#d9d2c3', ['#a69b86', '#f3efe6', '#8c8170', '#c9bfae'], 9000); sideTex.repeat.set(3, 3);
+  const sideMat = new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.92, metalness: 0, transparent: true });
+  const wheel = new THREE.Group(); scene.add(wheel);
+  const rim = new THREE.CylinderGeometry(R, R, 2 * HW, 360, 1, true); rim.rotateZ(Math.PI / 2); wheel.add(new THREE.Mesh(rim, wheelMat));
+  tex.repeat.set(63, 2);
+  [-1, 1].forEach(s => { const g = new THREE.RingGeometry(63.5, R, 180, 1); g.rotateY(s * Math.PI / 2); const m = new THREE.Mesh(g, sideMat); m.position.x = s * HW; wheel.add(m); });
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(63.5, 63.5, 46, 64, 1, true), new THREE.MeshStandardMaterial({ color: 0x8b93a3, metalness: 0.8, roughness: 0.35, side: THREE.DoubleSide }));
+  hub.rotation.z = Math.PI / 2; scene.add(hub);
+  // 放大位置的红圈（低倍时提示，放大后淡出）
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xe5342b, transparent: true, depthWrite: false });
+  const mark = new THREE.Mesh(new THREE.RingGeometry(6, 7.5, 48), ringMat); mark.position.copy(P).addScaledVector(N, 0.3); scene.add(mark);
+
+  // ── 微观块：磨粒（不规则多面体）+ 结合剂桥，按真实尺寸 ──
+  const r = rng(20261111), D = 0.185, pitch = 0.26, half = 3, depth = 1.6;
+  const grains = [], idx = new Map();
+  const nI = Math.round(2 * half / pitch), nK = Math.round(depth / (pitch * 0.85));
+  for (let k = 0; k <= nK; k++) for (let j = 0; j <= nI; j++) for (let i = 0; i <= nI; i++) {
+    const x = -half + i * pitch + (r() - 0.5) * pitch * 0.45, y = -half + j * pitch + (r() - 0.5) * pitch * 0.45;
+    const z = R + 0.04 - k * pitch * 0.85 + (r() - 0.5) * pitch * 0.3;
+    if (r() < 0.12) continue;   // 偶尔空一个位置，形成大一点的气孔
+    idx.set(i + ',' + j + ',' + k, grains.length); grains.push([x, y, z]);
+  }
+  const grainMat = new THREE.MeshStandardMaterial({ color: 0xf2f5fa, roughness: 0.32, metalness: 0, flatShading: true });
+  const gMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(D / 2, 0), grainMat, grains.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), pv = new THREE.Vector3();
+  grains.forEach(([x, y, z], n) => { e.set(r() * 6.3, r() * 6.3, r() * 6.3); q.setFromEuler(e); sc.set(0.75 + r() * 0.5, 0.75 + r() * 0.5, 0.75 + r() * 0.5);
+    m4.compose(pv.set(x, y, z), q, sc); gMesh.setMatrixAt(n, m4); });
+  scene.add(gMesh);
+  const bridges = [];
+  idx.forEach((a, key) => { const [i, j, k] = key.split(',').map(Number);
+    [[1, 0, 0], [0, 1, 0], [0, 0, 1]].forEach(([di, dj, dk]) => { const b = idx.get((i + di) + ',' + (j + dj) + ',' + (k + dk)); if (b !== undefined && r() < 0.62) bridges.push([a, b]); }); });
+  const bondMat = new THREE.MeshStandardMaterial({ color: 0xd4a35c, roughness: 0.45, metalness: 0, transparent: true, opacity: 0.92 });
+  const bMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 7, 1), bondMat, bridges.length);
+  const up = new THREE.Vector3(0, 1, 0), va = new THREE.Vector3(), vb = new THREE.Vector3();
+  bridges.forEach(([a, b], n) => { va.set(...grains[a]); vb.set(...grains[b]); const len = va.distanceTo(vb), rb = 0.03 + r() * 0.015;   // 结合剂在磨粒之间形成粗短的「颈」
+    q.setFromUnitVectors(up, vb.clone().sub(va).normalize()); m4.compose(pv.copy(va).add(vb).multiplyScalar(0.5), q, sc.set(rb, len, rb)); bMesh.setMatrixAt(n, m4); });
+  scene.add(bMesh);
+
+  // ── 镜头：距离按对数随放大倍数变化；低倍看整个砂轮，高倍斜着看那块微观区域 ──
+  const C0 = new THREE.Vector3(0, 0, 0), dir0 = new THREE.Vector3(0.62, 0.36, 0.7).normalize(), dir1 = new THREE.Vector3(0.18, 0.62, 0.76).normalize();
+  const view = { yaw: 0, pitch: 0 };
+  const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const zoomOf = v => Math.pow(10, v / 100 * 3);   // 滑块 0–100 → ×1 – ×1000
+  const place = () => {
+    const z = zoomOf(ZM.v), lz = Math.log10(z), t = sm(0, 0.55, lz);   // ×3.5 左右镜头就对准外圆上的那块区域
+    const tgt = C0.clone().lerp(P, t), dir = dir0.clone().lerp(dir1, sm(0.3, 1.9, lz)).normalize();
+    dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), view.yaw); dir.applyAxisAngle(new THREE.Vector3().crossVectors(dir, up).normalize(), view.pitch);
+    const d = 1150 / z; camera.position.copy(tgt).addScaledVector(dir, d); camera.lookAt(tgt);
+    camera.near = Math.max(0.002, d * 0.02); camera.far = d * 40 + 1600; camera.updateProjectionMatrix();
+    sun.position.copy(tgt).add(new THREE.Vector3(0.4, 1, 0.6).multiplyScalar(d * 3 + 50)); sun.target.position.copy(tgt);
+    // 砂轮本体在 ×150 – ×320 之间淡出，露出内部结构；红圈只在低倍出现
+    const fade = 1 - sm(Math.log10(150), Math.log10(320), lz);
+    [wheelMat, sideMat].forEach(m => { m.opacity = fade; m.depthWrite = fade > 0.98; }); wheel.visible = hub.visible = fade > 0.01;
+    ringMat.opacity = 1 - sm(0.8, 1.3, lz); mark.visible = ringMat.opacity > 0.01;
+    const vw = 2 * d * Math.tan(camera.fov * Math.PI / 360) * camera.aspect;
+    const lb = $('zmZoom'); if (lb) lb.textContent = `×${z < 10 ? z.toFixed(1) : Math.round(z)} · ${L('画面宽约', 'view width ≈')} ${fmtLen(vw)}`;
+    const st = $('zmStage'); if (st) { const s = zoomStage(z); if (st.dataset.s !== s) { st.innerHTML = s; st.dataset.s = s; } }
+  };
+  const el = renderer.domElement; let drag = null;
+  el.style.touchAction = 'none'; el.style.cursor = 'grab';
+  el.addEventListener('pointerdown', ev => { drag = [ev.clientX, ev.clientY, view.yaw, view.pitch]; el.setPointerCapture(ev.pointerId); el.style.cursor = 'grabbing'; });
+  el.addEventListener('pointermove', ev => { if (!drag) return; view.yaw = Math.max(-1.2, Math.min(1.2, drag[2] - (ev.clientX - drag[0]) * 0.006)); view.pitch = Math.max(-0.5, Math.min(0.6, drag[3] + (ev.clientY - drag[1]) * 0.005)); place(); });
+  el.addEventListener('pointerup', () => { drag = null; el.style.cursor = 'grab'; });
+  el.addEventListener('wheel', ev => { ev.preventDefault(); ZM.v = Math.max(0, Math.min(100, ZM.v - Math.sign(ev.deltaY) * 3)); const s = $('zmSlider'); if (s) s.value = ZM.v; place(); }, { passive: false });
+
+  const S = ZM.r = { renderer, scene, raf: 0, place, play: false, last: 0 };
+  S.onResize = () => { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; renderer.setSize(w, h); camera.aspect = w / h; place(); };
+  window.addEventListener('resize', S.onResize);
+  place();
+  const loop = now => {
+    S.raf = requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (now - (S.last || now)) / 1000); S.last = now;
+    if (S.play) { ZM.v = Math.min(100, ZM.v + dt * 9); const s = $('zmSlider'); if (s) s.value = ZM.v; place(); if (ZM.v >= 100) { S.play = false; const b = $('zmPlay'); if (b) b.textContent = L('▶ 自动放大', '▶ Auto zoom'); } }
+    renderer.render(scene, camera);
+  };
+  S.raf = requestAnimationFrame(loop);
+}
+function zoomCardHTML() {
+  return `<div class="glass card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">${L('砂轮放大镜：从整个砂轮到一颗磨粒', 'Wheel magnifier: from the whole wheel to a single grain')} ${DEMO()}</h2>
+        <button class="btn" id="zmPlay">${L('▶ 自动放大', '▶ Auto zoom')}</button>
+      </div>
+      <div class="v3wrap"><div id="zmHost" class="v3host" style="height:clamp(360px,52vh,560px)"></div>
+        <div class="v3tip">${L('拖动转角度 · 滚轮或滑块放大', 'drag to turn · scroll or slider to zoom')}</div></div>
+      <div class="grp" style="margin-top:10px"><div class="lab">${L('放大倍数', 'Magnification')} <b id="zmZoom"></b></div>
+        <input type="range" id="zmSlider" min="0" max="100" step="0.5" value="${ZM.v}"></div>
+      <div class="explain" id="zmStage" style="min-height:44px"></div>
+      <p class="note" style="margin:6px 0 0">${L('按真实比例建模：砂轮 Ø400 × 40（示意），磨粒按白刚玉 F80（约 0.185 mm）、陶瓷结合剂。磨粒形状、排列是示意，真实砂轮里磨粒大小不一、排列更乱。',
+        'Built to true scale: a Ø400 × 40 wheel (illustrative), grains as white alumina F80 (≈ 0.185 mm) in vitrified bond. Grain shape and packing are illustrative; real grains vary in size and are packed more randomly.')}</p>
+    </div>`;
+}
+function bindZoom() {
+  const s = $('zmSlider'); if (!s) return;
+  s.oninput = e => { ZM.v = +e.target.value; if (ZM.r) { ZM.r.play = false; ZM.r.place(); } $('zmPlay').textContent = L('▶ 自动放大', '▶ Auto zoom'); };
+  $('zmPlay').onclick = () => { const S = ZM.r; if (!S) return; if (S.play) { S.play = false; } else { if (ZM.v >= 99.5) ZM.v = 0; S.play = true; }
+    $('zmPlay').textContent = S.play ? L('⏸ 暂停', '⏸ Pause') : L('▶ 自动放大', '▶ Auto zoom'); };
+  mountZoom($('zmHost'));
+}
+
 // ═════════ 结构页：五要素 + 微观结构 + 规格标记 + 常见误解 ═════════
 // 粒度 → 磨粒平均尺寸（近似值）：F 号按 ISO 8486 量级，# 号微粉按 JIS R6001 量级；只用于示意比例
 const GRITS = [
@@ -1136,6 +1287,31 @@ function renderStructure() {
   const D50 = GRITS[ST.grit][1];
   $('pg-structure').innerHTML = `
   <div class="g2">
+    ${zoomCardHTML()}
+    <div class="col">
+      <div class="glass card"><h2>${L('什么是砂轮', 'What is a grinding wheel')} ${GEN()}</h2><div class="explain">${L(
+        '砂轮是用<b>结合剂</b>把大量很硬的<b>磨粒</b>粘在一起，再烧结或固化成圆盘形状的磨具，内部留有<b>气孔</b>。' +
+        '<ul style="margin:6px 0 0;padding-left:18px;line-height:1.75"><li><b>磨粒</b>：负责切削，每颗露在表面的磨粒都像一把小刀。</li><li><b>结合剂</b>：把磨粒抓住；抓得多牢，就是砂轮的「硬度」。</li><li><b>气孔</b>：装切屑、通冷却液、散热。</li></ul>' +
+        '<div style="margin-top:6px">砂轮高速旋转时，表面成千上万颗磨粒同时从工件上刮下极薄的切屑，所以磨削可以看成「无数把小刀同时做极微量的切削」。磨粒钝了会碎裂或脱落，露出新的刃口（自锐）；轮廓走样了可以用金刚石修整恢复。</div>',
+        'A grinding wheel is a tool made of many very hard <b>grains</b> held together by a <b>bond</b>, fired or cured into a disc, with <b>pores</b> inside.' +
+        '<ul style="margin:6px 0 0;padding-left:18px;line-height:1.75"><li><b>Grains</b>: do the cutting — every grain exposed on the face is a tiny tool.</li><li><b>Bond</b>: holds the grains; how firmly is the wheel "grade".</li><li><b>Pores</b>: hold chips, carry coolant, remove heat.</li></ul>' +
+        '<div style="margin-top:6px">As the wheel spins, thousands of grains each scrape off an extremely thin chip — grinding is "countless tiny tools each taking a minute cut". Dull grains fracture or drop out and expose new edges (self-sharpening); a worn profile is restored by diamond dressing.</div>')}</div></div>
+      <div class="glass card"><h2>${L('磨轴承为什么要用砂轮', 'Why bearings are ground with wheels')} ${GEN()}</h2><div class="explain">${L(
+        '<ul style="margin:0;padding-left:18px;line-height:1.75">' +
+        '<li><b>材料太硬</b>：套圈淬火后硬度约 60 HRC 量级，普通刀具难以稳定地切出轴承要求的精度和表面；磨粒（刚玉、CBN 等）比淬硬钢还硬。</li>' +
+        '<li><b>精度要求高</b>：沟径、内外径、圆度要控制到微米级。每颗磨粒切下的切屑极薄，可以一点一点精确地去除。</li>' +
+        '<li><b>表面要光</b>：磨削能得到很低的粗糙度，为后面的超精打基础；粗糙度和波纹度直接影响轴承的振动和噪声。</li>' +
+        '<li><b>要去掉热处理变形</b>：淬火后的椭圆、翘曲只能靠磨削留量去掉。</li>' +
+        '<li><b>能磨出成形轮廓</b>：砂轮可以修成和沟道一样的圆弧，切入一次就磨出沟道形状。</li></ul>',
+        '<ul style="margin:0;padding-left:18px;line-height:1.75">' +
+        '<li><b>The material is very hard</b>: hardened rings are around 60 HRC, too hard for ordinary cutting tools to hold bearing accuracy and finish; abrasive grains (alumina, CBN) are harder than hardened steel.</li>' +
+        '<li><b>Tight accuracy</b>: raceway, bore and OD sizes and roundness are held to micrometres. Each grain takes an extremely thin chip, so stock comes off in tiny, controllable amounts.</li>' +
+        '<li><b>Smooth surfaces</b>: grinding gives low roughness and prepares for superfinishing; roughness and waviness drive bearing vibration and noise.</li>' +
+        '<li><b>Heat-treatment distortion</b>: ovality and warpage after hardening can only be removed by grinding stock.</li>' +
+        '<li><b>Formed profiles</b>: the wheel can be dressed to the raceway arc and plunge the groove shape in one go.</li></ul>')}</div></div>
+    </div>
+  </div>
+  <div class="g2">
     <div class="glass card">
       <div class="row" style="justify-content:space-between">
         <h2 style="margin:0">${L('砂轮 / 油石的微观结构', 'Microstructure of a wheel / stone')} <span class="tag">${L('截面示意：磨粒 + 结合剂 + 气孔', 'section sketch: grains + bond + pores')}</span></h2>
@@ -1197,6 +1373,7 @@ function renderStructure() {
   bindSeg('bondSeg', v => { ST.bond = v; save(); updStructure(); });
   [['sGrit', 'grit'], ['sGrade', 'grade'], ['sStruct', 'struct']].forEach(([id, k]) => $(id).oninput = e => { ST[k] = +e.target.value; save(); updStructure(); });
   updStructure();
+  bindZoom();
 }
 // 滑块拖动时只更新文字和画布，不重建控件
 function updStructure() {
@@ -1212,7 +1389,7 @@ function updStructure() {
     <b>${L('组织号', 'Structure')} ${ST.struct}</b>：${L('磨粒排得多密。号越大越疏松，气孔越多，容屑、通冷却液越好，但单位面积参与切削的磨粒少。', 'how densely grains are packed. Higher number = more open, more pores for chips and coolant, but fewer cutting grains per area.')}</div>`;
   requestAnimationFrame(drawMicro);
 }
-PAGES.structure = { render: renderStructure, redraw: drawMicro, enter: () => requestAnimationFrame(drawMicro) };
+PAGES.structure = { render: renderStructure, redraw: drawMicro, enter: () => { requestAnimationFrame(drawMicro); if (!ZM.r && $('zmHost')) mountZoom($('zmHost')); }, leave: disposeZoom };
 
 // ═════════ 微观页：单颗磨粒切削、砂轮表面状态、超精、脏东西在哪 ═════════
 const MC = { h: 1.6, bond: 'mid', raf: 0, t0: 0, life: null, sfT: 0, sfPlay: true, osc: 1, spd: 1 };
@@ -2155,6 +2332,7 @@ PAGES.params = {
   if (q.get('cl')) CL.kind = q.get('cl');   // 测试用：冷却页介质
   if (q.get('xray')) V3XRAY = q.get('xray') === '1';   // 测试用：透视开关
   if (q.get('sup')) V3SUP = q.get('sup') === '1';   // 测试用：支撑开关
+  if (q.get('zm')) ZM.v = +q.get('zm');   // 测试用：放大镜初始倍数（滑块 0–100）
   if (q.get('fs')) setTimeout(toggleV3Full, 800);   // 测试用：全屏（无用户手势时走铺满窗口的替代方式）
   if (q.get('fm')) FACE_MODE = q.get('fm');   // 测试用：端面磨送料方式   // 测试用：修整方式
   renderChrome();

@@ -411,7 +411,9 @@ function mountV3(host, ringType, key) {
   const side = key === 'groove';   // 沟道磨（内沟、大沟）都是左右关系
   const machine = new THREE.Group(); scene.add(machine);
   // 无心磨也是左右关系：磨削砂轮在左、导轮在右、托板在工件下面（局部 +X → 世界 +X，局部 +Z → 世界 +Y）
-  if (side) machine.rotation.x = Math.PI / 2; else if (key === 'od') machine.rotation.x = -Math.PI / 2; else machine.rotation.z = Math.PI / 2;   // 其余工序：局部 +X（接触方向）朝上，轴线水平
+  if (side) machine.rotation.x = Math.PI / 2; else if (key === 'od') machine.rotation.x = -Math.PI / 2;
+  else if (key === 'face' && FACE_MODE === 'carrier') machine.rotation.set(-Math.PI / 2, Math.PI, 0, 'YXZ');   // 圆盘送料：局部 x → 世界 −x（送料盘在左、砂轮在右），局部 z → 世界上
+  else machine.rotation.z = Math.PI / 2;   // 其余工序：局部 +X（接触方向）朝上，轴线水平
   const clip = new THREE.Plane(side || key === 'od' ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(0, 0, -1), 0);   // 剖切面都过轴线
   const steel = new THREE.MeshStandardMaterial({ color: 0xd3d9e2, metalness: 0.72, roughness: 0.26, envMapIntensity: 1.3 });
   const steelBack = new THREE.MeshStandardMaterial({ color: 0xb9473f, metalness: 0.2, roughness: 0.6, side: THREE.BackSide });
@@ -621,11 +623,20 @@ function mountV3(host, ringType, key) {
       // 圆盘送料：送料盘带着一圈工件转，工件在两片砂轮之间扫过
       const CC = new THREE.Vector3(150, 0, 0), Rp = 200, n = 9;
       const cg = new THREE.Group(); cg.position.copy(CC); machine.add(cg);
-      const disc = new THREE.Mesh(new THREE.CylinderGeometry(Rp + rr + 22, Rp + rr + 22, 8, 128), carrierMat); cg.add(disc);
+      // 送料盘是工装、套圈是物料，分开画：薄盘外圈开 U 形槽（槽之间是齿），套圈放在槽里被齿推着走；
+      // 盘厚 8 mm，比套圈宽度 20 mm 薄，套圈两个端面都伸出盘面，两片砂轮才磨得到
+      const Ro = Rp + rr + 16, hw = rr + 1.5, sl = Math.sqrt(Ro * Ro - hw * hw), dl = Math.atan2(hw, sl), sh = new THREE.Shape();
+      for (let j = 0; j < n; j++) { const f = j / n * Math.PI * 2, dx = Math.cos(f), dy = Math.sin(f), tx = -dy, ty = dx;
+        if (!j) sh.moveTo(dx * sl - tx * hw, dy * sl - ty * hw); else sh.absarc(0, 0, Ro, (j - 1) / n * Math.PI * 2 + dl, f - dl, false);
+        sh.lineTo(dx * Rp - tx * hw, dy * Rp - ty * hw); sh.absarc(dx * Rp, dy * Rp, hw, f - Math.PI / 2, f + Math.PI / 2, true); sh.lineTo(dx * sl + tx * hw, dy * sl + ty * hw); }
+      sh.absarc(0, 0, Ro, (n - 1) / n * Math.PI * 2 + dl, Math.PI * 2 - dl, false);
+      const hole = new THREE.Path(); hole.absarc(0, 0, 32, 0, Math.PI * 2, true); sh.holes.push(hole);
+      const dg = new THREE.ExtrudeGeometry(sh, { depth: 8, bevelEnabled: false, curveSegments: 48 }); dg.translate(0, 0, -4); dg.rotateX(Math.PI / 2);
+      const disc = new THREE.Mesh(dg, carrierMat); cg.add(disc);
       for (let j = 0; j < n; j++) { const g = mk(); g.userData.a0 = j / n * Math.PI * 2; }
       const hub = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 60, 32), darkMetal); cg.add(hub);
       motion = t => { const a = t * 0.25; cg.rotation.y = -a; feed.forEach(g => { const b = g.userData.a0 + a; g.position.set(CC.x + Rp * Math.cos(b), 0, CC.z + Rp * Math.sin(b)); g.rotation.y = t * 1.2; }); };
-      addLabel(new THREE.Vector3(CC.x, 6, -Rp - rr - 10), L('送料盘（圆盘送料：带着工件转着穿过两砂轮之间）', 'rotary carrier (rings swept between the wheels)'));
+      addLabel(new THREE.Vector3(CC.x, 6, -Ro - 14), L('送料盘（工装）：外圈有齿，套圈夹在齿槽里，整圈转着穿过两砂轮之间', 'rotary carrier (fixture): rings sit in the slots between its teeth and are carried between the wheels'));
     } else {
       // 贯穿送料：倾斜料道。工件立着（端面朝两片砂轮），靠外圆在料道上从右上滚进、左下滚出
       // 局部 x = 世界上下，局部 z = 屏幕左右（镜头顺着砂轮轴线看，局部 z 负 = 右边）
@@ -645,7 +656,7 @@ function mountV3(host, ringType, key) {
     // 火花：两片砂轮都在磨，从每个处于砂轮之间的工件的两个端面同时喷出
     emitters = () => { const out = []; feed.forEach(g => { const dx = g.position.x - WC.x, dz = g.position.z - WC.z, d = Math.hypot(dx, dz); if (d > 300 - rr) return;
       [10, -10].forEach(y => { const s = y > 0 ? 1 : -1; out.push({ p: new THREE.Vector3(g.position.x + (Math.random() - .5) * rr * 1.4, y + s * 0.3, g.position.z + (Math.random() - .5) * rr * 1.4), t: new THREE.Vector3(-dz / d * s, s * 0.35, dx / d * s) }); }); }); return out; };
-    const thru = FACE_MODE === 'thru', nz0 = thru ? new THREE.Vector3(40, 0, -300) : new THREE.Vector3(80, 0, -150), nzT = thru ? new THREE.Vector3(-40, 0, -250) : new THREE.Vector3(-10, 0, -60);
+    const thru = FACE_MODE === 'thru', nz0 = thru ? new THREE.Vector3(40, 0, -300) : new THREE.Vector3(60, 0, 230), nzT = thru ? new THREE.Vector3(-40, 0, -250) : new THREE.Vector3(-10, 0, 120);
     noz(nz0.clone().setY(34), nzT.clone().setY(10.5), 'main', L('砂轮 1 磨削液', 'coolant, wheel 1'));
     noz(nz0.clone().setY(-34), nzT.clone().setY(-10.5), 'main', L('砂轮 2 磨削液', 'coolant, wheel 2'));
     addLabel(thru ? new THREE.Vector3(-85, 0, 0) : new THREE.Vector3(-10, 0, 60), L('两个端面同时磨（红色 = 正在磨的端面）', 'both faces ground at once (red = faces being ground)'), 'r');
@@ -683,7 +694,7 @@ function mountV3(host, ringType, key) {
   // ── 相机（拖动旋转、滚轮缩放）──
   const big = key === 'groove' && ringType === 'inner', og = key === 'groove' && ringType === 'outer';
   const sfv = key === 'sf', ft = key === 'face' && FACE_MODE === 'thru';
-  const view = { th: big ? -0.28 : og ? -0.5 : key === 'od' ? 0.45 : ft ? 1.2 : key === 'face' ? 0.28 : sfv ? (ringType === 'inner' ? -0.95 : -1.3) : -0.85, ph: sfv && ringType === 'outer' ? 0.62 : big || og ? 0.42 : key === 'od' ? 0.22 : ft ? 0.22 : key === 'face' ? 0.3 : 0.38, d: sfv ? (ringType === 'inner' ? 300 : 300) : big ? 250 : og ? 220 : key === 'od' ? 1150 : ft ? 1050 : key === 'face' ? 820 : 250, tgt: new THREE.Vector3(big ? 42 : og ? 22 : key === 'od' ? -80 : 0, sfv ? (ringType === 'inner' ? 18 : -24) : big ? 0 : key === 'od' ? 0 : ft ? -90 : key === 'face' ? -70 : 12, 0) };
+  const view = { th: big ? -0.28 : og ? -0.5 : key === 'od' ? 0.45 : ft ? 1.2 : key === 'face' ? 0.32 : sfv ? (ringType === 'inner' ? -0.95 : -1.3) : -0.85, ph: sfv && ringType === 'outer' ? 0.62 : big || og ? 0.42 : key === 'od' ? 0.22 : ft ? 0.22 : key === 'face' ? 0.3 : 0.38, d: sfv ? (ringType === 'inner' ? 300 : 300) : big ? 250 : og ? 220 : key === 'od' ? 1150 : ft ? 1050 : key === 'face' ? 1200 : 250, tgt: new THREE.Vector3(big ? 42 : og ? 22 : key === 'od' ? -80 : key === 'face' && !ft ? 60 : 0, sfv ? (ringType === 'inner' ? 18 : -24) : big ? 0 : key === 'od' ? 0 : ft ? -90 : key === 'face' ? 0 : 12, 0) };
   const placeCam = () => { camera.position.set(view.tgt.x + view.d * Math.cos(view.ph) * Math.sin(view.th), view.tgt.y + view.d * Math.sin(view.ph), view.tgt.z + view.d * Math.cos(view.ph) * Math.cos(view.th)); camera.lookAt(view.tgt); };
   placeCam();
   const el = renderer.domElement; let drag = null;

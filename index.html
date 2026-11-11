@@ -524,6 +524,19 @@ function mountV3(host, ringType, key) {
     part([[xc, zt], [xc, r + 60], [xc - 26, r + 60], [xc - 26, zt + 10]], [[3, 0]]);
     addLabel(new THREE.Vector3(xc - 13, 0, r + 40), L('刀口支撑头（下）', 'knife-edge shoe (below)'), 'r', 1);
   };
+  // 外圈的外圆支撑头（用户现场照片）：两个独立的支撑头，一个在左、一个在下，相隔 90°，互不相连；
+  // 每个都是钢制夹座 + 白色陶瓷头，陶瓷头的贴合面是和外圆同半径的凹圆弧（陶瓷耐磨、不导磁，不会被电磁卡盘磁化吸铁屑）
+  const ceramicMat = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.35, metalness: 0.05 });
+  const ceramicShoes = (r, angDeg) => angDeg.forEach((a, i) => {
+    const t = a * Math.PI / 180, g = new THREE.Group(); g.position.set(r * Math.cos(t), 0, r * Math.sin(t)); g.rotation.y = -t; sup(g);   // 组的局部 +x = 径向朝外
+    // 陶瓷头：贴合面是半径 r 的凹圆弧，和外圆同心、完全贴合；厚 4、周向宽约 14、轴向宽 12
+    const ph = 7 / r, ps = new THREE.Shape(); ps.absarc(-r, 0, r + 0.05, -ph, ph, false); ps.absarc(-r, 0, r + 4, ph, -ph, true); ps.closePath();
+    const pg2 = new THREE.ExtrudeGeometry(ps, { depth: 12, bevelEnabled: false, curveSegments: 24 }); pg2.translate(0, 0, -6); pg2.rotateX(Math.PI / 2);
+    g.add(new THREE.Mesh(pg2, ceramicMat));
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(14, 18, 18), plateMat); seat.position.x = 11.2; g.add(seat);
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(26, 12, 10), plateMat); stem.position.x = 31; g.add(stem);
+    addLabel(new THREE.Vector3((r + 14) * Math.cos(t), 0, (r + 14) * Math.sin(t)), i ? L('支撑头（陶瓷头）', 'shoe (ceramic tip)') : L('支撑头（陶瓷头）· 两个独立、相隔 90°', 'shoe (ceramic tip) · two separate, 90° apart'), 'r', 1);
+  });
   const rOD = ringType === 'inner' ? 31.75 : 45;
 
   if (key === 'groove' && ringType === 'inner') {
@@ -546,7 +559,7 @@ function mountV3(host, ringType, key) {
     const wg = new THREE.Group(); wg.position.set(G.rb - Rw - 0.15, 0, 0); wg.add(wheel); machine.add(wg);
     const nut = new THREE.Mesh(hexNut(11, 7), new THREE.MeshStandardMaterial({ color: 0x9b2a2a, metalness: 0.6, roughness: 0.4 })); nut.position.y = -13.5; wg.add(nut);
     const ax = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 6.5, 160, 32), new THREE.MeshStandardMaterial({ color: 0x2a9a9a, metalness: 0.5, roughness: 0.35 })); ax.position.y = 84; wg.add(ax);
-    spin.push([wheel, 'y', 22]); chuck(); shoes(45, [160, 200]);
+    spin.push([wheel, 'y', 22]); chuck(); ceramicShoes(45, [180, 90]);
     contact = new THREE.Vector3(G.rb, 0, 0); tangent = new THREE.Vector3(0, 0, -1);
     noz(new THREE.Vector3(G.rb - 10, 34, 26), new THREE.Vector3(G.rb - 1.5, 0, 7), 'main', L('主喷嘴：从敞开端伸进去，对准楔形入口', 'main nozzle: from the open side into the entry wedge'));
     noz(new THREE.Vector3(G.rb - 2 * Rw - 14, 30, 0), new THREE.Vector3(G.rb - 2 * Rw + 1, 2, 0), 'clean', L('砂轮清洗喷嘴', 'wheel-cleaning nozzle'));
@@ -598,7 +611,7 @@ function mountV3(host, ringType, key) {
       const nose = sup(new THREE.Mesh(new THREE.CylinderGeometry(22, 24.9, 3, 64), darkMetal)); nose.position.y = 15;
       const shaft = sup(new THREE.Mesh(new THREE.CylinderGeometry(18, 18, 60, 48), darkMetal)); shaft.position.y = -40;
       addLabel(new THREE.Vector3(0, 18, 0), L('定心轴（插进内孔定心，沟道不支撑）', 'centring arbor (in the bore; raceway unsupported)'), '', 1);
-    } else shoes(rOD, [160, 200], L('外圆支撑头', 'OD support shoe'));
+    } else ceramicShoes(rOD, [180, 270]);
     pressRollers(7);   // 压臂沿轴向从正面压入，内外圈一样
     contact = F(new THREE.Vector3(G.rb, 0, 0)); tangent = new THREE.Vector3(0, 0, 1); fluid = 'oil';
     noz(F(new THREE.Vector3(G.rb + dir * 18, 22, 30)), F(new THREE.Vector3(G.rb, 0, 5)), 'oil', L('超精油（两侧浇注）', 'superfinishing oil (both sides)'));
@@ -860,14 +873,17 @@ function stepsOf(ring) {
 
 // 后磨支撑（靠山 / 支撑头 / 支撑板）说明卡片
 function suppCard(key, ring) {
+  const ceramicNote = ['<br>陶瓷头的贴合面磨成<b>和外圆同样弧度的凹圆弧</b>，整面贴住外圆，不是点、线接触。<br><b>支撑头为什么用陶瓷头</b>：耐磨、硬，和外圆摩擦时不容易划伤外圆；陶瓷不导磁，电磁卡盘通电时支撑头不会被磁化、不吸铁屑。', '<br>The ceramic tip face is ground to a <b>concave arc matching the OD</b>, so it sits on the OD over its whole face.<br><b>Why ceramic tips</b>: hard and wear-resistant, gentle on the OD, and non-magnetic — the energised chuck does not magnetise the shoe, so it does not pick up swarf.'];
   const here = key === 'bore'
     ? L('本工序：支撑头顶在<b>已经磨好的沟道</b>上（以沟定孔）。', 'This step: the shoes sit on the <b>finished raceway</b> (bore from raceway).')
     : key === 'sf' && ring === 'inner'
     ? L('本工序（内圈超精）：<b>沟道不支撑</b>。内孔套在<b>定心轴</b>上定心，背面贴靠山，正面由<b>两个压轮</b>压紧端面。', 'This step (inner superfinishing): <b>the raceway is not supported</b>. The bore sits on a <b>centring arbor</b>, the back face on the backing plate, and <b>two pressure rollers</b> press the front face.')
     : key === 'sf'
-    ? L('本工序（外圈超精）：<b>外圆支撑头</b>托住外圆，背面贴靠山，正面由<b>两个压轮</b>压紧端面。', 'This step (outer superfinishing): <b>OD shoes</b> carry the OD, the back face sits on the backing plate, and <b>two pressure rollers</b> press the front face.')
+    ? L('本工序（外圈超精）：<b>两个独立的外圆支撑头</b>（一个在下、一个在左，相隔 90°）托住外圆，背面贴靠山，正面由<b>两个压轮</b>压紧端面。' + ceramicNote[0], 'This step (outer superfinishing): <b>two separate OD shoes</b> (one below, one on the left, 90° apart) carry the OD, the back face sits on the backing plate, and <b>two pressure rollers</b> press the front face.' + ceramicNote[1])
     : key === 'groove' && ring === 'inner'
     ? L('本工序（小沟磨）：左边一个 <b>V 形支撑头</b>，下面一个<b>刀口支撑头</b>，接触边都做成尖的刀口，<b>顶在沟底</b>；砂轮从右边压过来，V 形支撑头吃住径向力，刀口托住工件。<br><b>为什么顶在沟底</b>：这是支撑头式无心磨，套圈的位置由两个支撑头和砂轮这三个点决定，三个点都在正在磨的沟道上。沟道以它自己为基准，越磨越圆，也不受外圆、挡边误差的影响。<b>为什么做成尖的</b>：只在沟底接触，碰不到沟道两侧的圆弧和挡边，接触位置明确。', 'This step (inner raceway): a <b>V-shaped shoe</b> on the left and a <b>knife-edge shoe</b> below, with knife-edge contact edges <b>bearing on the raceway bottom</b>; the wheel pushes from the right, the V shoe takes the radial force and the knife edge carries the ring.<br><b>Why the raceway bottom</b>: this is shoe-type centerless grinding — the ring is located by three points (two shoes + wheel), all on the raceway being ground, so the raceway references itself, rounds up, and is unaffected by OD or shoulder errors. <b>Why pointed</b>: contact only at the raceway bottom, clear of the groove flanks and shoulders.')
+    : key === 'groove' && ring === 'outer'
+    ? L('本工序（大沟磨）：外圆由<b>两个独立的支撑头</b>托住，一个在左、一个在下，<b>相隔 90°</b>，互不相连。' + ceramicNote[0], 'This step (outer raceway): the OD rests on <b>two separate shoes</b>, one on the left and one below, <b>90° apart</b>, not joined.' + ceramicNote[1])
     : L('本工序：支撑头顶在<b>外圆</b>上。', 'This step: the shoes sit on the <b>OD</b>.');
   const ul = a => `<ul style="margin:6px 0 0;padding-left:18px;line-height:1.7">${a.map(t => `<li>${t}</li>`).join('')}</ul>`;
   return `<div class="glass card"><h2>${L('后磨的支撑：靠山 · 支撑头 · 支撑板', 'Supports after heat treatment: backing plate · shoes · shoe plate')} ${GEN()}</h2><div class="explain">${L(

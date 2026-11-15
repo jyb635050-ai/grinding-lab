@@ -693,10 +693,14 @@ function mountV3(host, ringType, key) {
     contact = new THREE.Vector3(-45, 0, 0); tangent = new THREE.Vector3(0, 0, -1);
     [-80, -40, 0, 40, 80].forEach((y, i) => noz(new THREE.Vector3(-62, y, 60), new THREE.Vector3(-47, y, 6), 'main', i === 2 ? L('扁平宽喷嘴：覆盖整个砂轮宽度', 'flat wide nozzle across the wheel width') : ''));
     noz(new THREE.Vector3(-295, 0, 290), new THREE.Vector3(-295, 0, 244), 'clean', L('砂轮清洗喷嘴', 'wheel-cleaning nozzle'));
-    motion = t => { work.position.y = -90 + ((t * 18) % 180); };
+    // 贯穿磨：外圈一个挨一个排成一列，在托板上沿轴向连续穿过两轮之间（不是一次只磨一只）
+    const pitchY = 21, nR = 12, Ltr = nR * pitchY, train = [work];
+    for (let j = 1; j < nR; j++) { const c = work.clone(); machine.add(c); train.push(c); spin.push([c, 'y', 2.2]); }
+    motion = t => { train.forEach((g, j) => { g.position.y = ((t * 18 + j * pitchY) % Ltr) - Ltr / 2; }); };
+    emitters = () => train.filter(g => Math.abs(g.position.y) < 96).map(g => ({ p: new THREE.Vector3(-45, g.position.y + (Math.random() - 0.5) * 18, 0), t: tangent }));
     addLabel(new THREE.Vector3(-(45 + Rg), 0, 120), L('磨削砂轮（Ø500 级，很宽）', 'grinding wheel (~Ø500, wide)')); addLabel(new THREE.Vector3(45 + Rr, 0, 110), L('导轮（Ø330 级，倾斜小角度）', 'regulating wheel (~Ø330, tilted)')); addLabel(new THREE.Vector3(0, 60, -90), L('托板', 'work-rest blade'));
   }
-  if (key !== 'face') addLabel(new THREE.Vector3(ringType === 'inner' ? -30 : -44, 12, -10), (ringType === 'inner' ? L('内圈（工件，在转）', 'inner ring (turning)') : L('外圈（工件，在转）', 'outer ring (turning)')) + (RING_GEO[ringType] ? '' : L(' · 简化模型', ' · simplified')), 'w');
+  if (key !== 'face') addLabel(new THREE.Vector3(ringType === 'inner' ? -30 : -44, 12, -10), (key === 'od' ? L('外圈：一个挨一个排成一列，连续穿过两轮之间', 'outer rings: end to end in a line, fed through continuously') : ringType === 'inner' ? L('内圈（工件，在转）', 'inner ring (turning)') : L('外圈（工件，在转）', 'outer ring (turning)')) + (RING_GEO[ringType] ? '' : L(' · 简化模型', ' · simplified')), 'w');
   if (key === 'groove' || key === 'sf') { const m = SG.arc[Math.floor(SG.arc.length / 2)]; addLabel(new THREE.Vector3(m[0], m[1], 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.6), L(`沟道（圆弧 R${fmt(SG.r, 1)}）`, `raceway (arc R${fmt(SG.r, 1)})`), 'w'); }
 
   // ── 火花和液流（粒子）──
@@ -876,7 +880,7 @@ function stepsOf(ring) {
       t: L('外径无心磨', 'Centerless OD grinding'),
       machine: L('无心磨床（贯穿磨）', 'Centerless grinder (through-feed)'),
       toolTxt: L('磨削砂轮 + 导轮（橡胶结合剂）+ 托板', 'Grinding wheel + regulating wheel (rubber bond) + work-rest blade'),
-      motion: L('两轮同向旋转，工件反向旋转；导轮倾斜一个小角度，带着工件一边转一边沿轴向送出', 'Both wheels turn the same way, the ring the opposite way; the tilted regulating wheel drives the ring and feeds it axially through'),
+      motion: L('两轮同向旋转，工件反向旋转；导轮倾斜一个小角度，带着工件一边转一边沿轴向送出。外圈一个挨一个排成一列，连续不断地穿过去', 'Both wheels turn the same way, the ring the opposite way; the tilted regulating wheel drives the ring and feeds it axially through. Rings go through end to end in a continuous line'),
       datum: L('<b>外圆自身</b>（不用夹具、不用中心孔）', '<b>The OD itself</b> (no chuck, no centres)'),
       goal: L('外径尺寸（与座孔的配合）、圆度、圆柱度、表面', 'OD size (housing fit), roundness, cylindricity, finish'),
       ctq: [L('外径', 'OD'), L('圆度（棱圆）', 'roundness (lobing)'), L('锥度', 'taper'), L('烧伤', 'burn')],
@@ -2279,53 +2283,59 @@ function sfUpd() {
     `Cross-hatch angle ≈ <b class="lv">${fmt(m.ang, 0)}°</b> (set by oscillation vs. surface speed — pure geometry).<br>Higher pressure, thinner oil → longer cutting, more removal; thicker oil, higher speed → earlier film, earlier polishing.`)}</div>`;
 }
 
-// ── 切入磨循环：快进 → 粗磨 → 精磨 → 光磨 → 退回 ──
+// ── 切入磨循环（小沟、内径、大沟都一样，阶段名照设备画面）：上料 → 上磁 → 快趋 → 黑皮 → 粗磨 → 精磨 → 光磨 → 光延 → 下料 ──
+// 只用阶段的先后和快慢关系；进给速度、进给量、时间都是示意，不是任何设备的实际参数
+const CYC_SEG = [[0, 0.06, '上料', 'load'], [0.06, 0.1, '上磁', 'magnet on'], [0.1, 0.2, '快趋', 'rapid'], [0.2, 0.32, '黑皮', 'scale'], [0.32, 0.54, '粗磨', 'rough'],
+  [0.54, 0.7, '精磨', 'finish'], [0.7, 0.82, '光磨', 'fine feed'], [0.82, 0.91, '光延', 'dwell'], [0.91, 1, '下料', 'unload']];
+const CYC_V = [0, 0, 1, 0.55, 0.3, 0.12, 0.06, 0, 0];   // 各阶段进给速度（相对，快趋 = 1）
 function cycleData() {
-  // 时间 0..1；指令位置（砂轮进给）与实际尺寸（受系统弹性变形滞后）；单位：剩余余量（示意 µm）
-  const A = 40, pts = [];
-  const seg = [[0, 0.12, L('快进', 'rapid')], [0.12, 0.45, L('粗磨', 'rough')], [0.45, 0.72, L('精磨', 'finish')], [0.72, 0.9, L('光磨', 'spark-out')], [0.9, 1, L('退回', 'retract')]];
-  let act = A + 6;
-  for (let i = 0; i <= 200; i++) {
-    const t = i / 200;
-    let cmd;
-    if (t < 0.12) cmd = A + 6 - 6 * t / 0.12;
-    else if (t < 0.45) cmd = A - (A - 10) * (t - 0.12) / 0.33;
-    else if (t < 0.72) cmd = 10 - 12 * (t - 0.45) / 0.27;
-    else if (t < 0.9) cmd = -2;
-    else cmd = -2 + 40 * (t - 0.9) / 0.1;
-    // 实际尺寸：接触后追随指令，但有弹性让刀；光磨阶段让刀逐渐释放
-    const lag = t < 0.12 ? 0 : t < 0.45 ? 6 : t < 0.72 ? 2.5 : 0;
-    const target = Math.max(0, Math.min(act, cmd + lag + 2));
-    act += (target - act) * (t < 0.9 ? 0.18 : 0);
+  const A = 40, G = 16, pts = [], seg = CYC_SEG.map(([x0, x1, z, e]) => [x0, x1, L(z, e)]);
+  // 指令位置：剩余余量坐标（示意 µm）；> A 表示砂轮还没碰到工件
+  const knots = [[0, A + G], [0.1, A + G], [0.2, A + 2], [0.32, A - 8], [0.54, 9], [0.7, 2], [0.82, -1], [0.91, -1], [1, A + G]];
+  const cmdAt = t => { for (let k = 1; k < knots.length; k++) if (t <= knots[k][0]) { const [t0, v0] = knots[k - 1], [t1, v1] = knots[k]; return v0 + (v1 - v0) * (t - t0) / (t1 - t0); } return A + G; };
+  let act = A;
+  for (let i = 0; i <= 300; i++) {
+    const t = i / 300, cmd = cmdAt(t);
+    // 实际尺寸：碰到以后跟着指令走，但有弹性让刀；黑皮段只碰到高点、断续接触，磨得少；光延段让刀慢慢释放
+    const lag = t < 0.2 ? 0 : t < 0.32 ? 7 + 2 * Math.sin(i * 1.7) : t < 0.54 ? 6 : t < 0.7 ? 2.5 : t < 0.82 ? 1 : 0;
+    if (t < 0.91) { const target = Math.max(-1, Math.min(act, cmd + lag + 1)); act += (target - act) * 0.16; }
     pts.push([t, cmd, act]);
   }
-  return { pts, seg, A };
+  return { pts, seg, A, G };
 }
 const CYC = { d: null };
 function drawCycle() {
   const cv = $('cycCv'); if (!cv) return;
   if (!CYC.d || CYC.lang !== lang) { CYC.d = cycleData(); CYC.lang = lang; }
-  const { g, w, h } = prepCanvas(cv), { pts, seg, A } = CYC.d, L0 = 46, R0 = 12, T0 = 18, B0 = 26, pw = w - L0 - R0, ph = h - T0 - B0;
-  const X = t => L0 + t * pw, Y = v => T0 + ph - (v + 6) / (A + 14) * ph;
-  const cols = ['rgba(120,130,150,.12)', 'rgba(229,52,43,.10)', 'rgba(240,138,0,.10)', 'rgba(31,157,85,.10)', 'rgba(120,130,150,.12)'];
+  const { g, w, h } = prepCanvas(cv), { pts, seg, A, G } = CYC.d, L0 = 46, R0 = 12, T0 = 18, B0 = 70, pw = w - L0 - R0, ph = h - T0 - B0;
+  const X = t => L0 + t * pw, Y = v => T0 + ph - (v + 6) / (A + G + 10) * ph;
+  const cols = ['rgba(120,130,150,.10)', 'rgba(120,130,150,.16)', 'rgba(10,124,255,.08)', 'rgba(60,60,60,.12)', 'rgba(229,52,43,.10)', 'rgba(240,138,0,.10)', 'rgba(31,157,85,.10)', 'rgba(31,157,85,.18)', 'rgba(120,130,150,.10)'];
   seg.forEach(([a, b, t], i) => { g.fillStyle = cols[i]; g.fillRect(X(a), T0, X(b) - X(a), ph); g.fillStyle = cssv('--muted'); g.font = FONT; g.textAlign = 'center'; g.fillText(t, (X(a) + X(b)) / 2, T0 + 12); });
   g.strokeStyle = cssv('--axis'); g.beginPath(); g.moveTo(L0, T0); g.lineTo(L0, T0 + ph); g.lineTo(L0 + pw, T0 + ph); g.stroke();
   g.strokeStyle = cssv('--grid'); g.beginPath(); g.moveTo(L0, Y(0)); g.lineTo(L0 + pw, Y(0)); g.stroke();
-  g.fillStyle = cssv('--muted'); g.textAlign = 'right'; g.fillText(L('尺寸 0', 'size 0'), L0 - 4, Y(0) + 4);
+  g.setLineDash([3, 3]); g.beginPath(); g.moveTo(L0, Y(A)); g.lineTo(L0 + pw, Y(A)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = cssv('--muted'); g.textAlign = 'right'; g.fillText(L('尺寸 0', 'size 0'), L0 - 4, Y(0) + 4); g.fillText(L('毛坯', 'blank'), L0 - 4, Y(A) + 4);
   g.save(); g.translate(12, T0 + ph / 2); g.rotate(-Math.PI / 2); g.textAlign = 'center'; g.fillText(L('剩余余量（示意）', 'remaining stock (illus.)'), 0, 0); g.restore();
-  const n = Math.max(1, Math.round(PC.t * 200));
+  const n = Math.max(1, Math.round(PC.t * 300));
   g.setLineDash([5, 4]); g.strokeStyle = cssv('--accent'); g.lineWidth = 1.6; g.beginPath(); pts.slice(0, n + 1).forEach(([t, c], i) => i ? g.lineTo(X(t), Y(c)) : g.moveTo(X(t), Y(c))); g.stroke(); g.setLineDash([]);
-  g.strokeStyle = cssv('--red'); g.lineWidth = 2.4; g.beginPath(); pts.slice(0, Math.min(n, 180) + 1).forEach(([t, , a], i) => i ? g.lineTo(X(t), Y(a)) : g.moveTo(X(t), Y(a))); g.stroke(); g.lineWidth = 1;
-  const cur = pts[Math.min(n, 180)], dev = Math.round(cur[2]);
+  g.strokeStyle = cssv('--red'); g.lineWidth = 2.4; g.beginPath(); pts.slice(0, Math.min(n, 273) + 1).forEach(([t, , a2], i) => i ? g.lineTo(X(t), Y(a2)) : g.moveTo(X(t), Y(a2))); g.stroke(); g.lineWidth = 1;
+  // 下面一条：各阶段进给速度（相对，越往后越慢；光延不进给）
+  const sy = T0 + ph + 22, sh = 34;
+  g.fillStyle = cssv('--muted'); g.textAlign = 'left'; g.fillText(L('进给速度（示意，相对）', 'feed rate (illustrative, relative)'), L0, sy - 6);
+  CYC_SEG.forEach(([a, b], i) => { const v = CYC_V[i]; if (!v) return; g.fillStyle = i === 2 ? 'rgba(10,124,255,.55)' : 'rgba(229,52,43,.55)'; g.fillRect(X(a) + 2, sy + sh * (1 - v), X(b) - X(a) - 4, sh * v); });
+  g.strokeStyle = cssv('--axis'); g.beginPath(); g.moveTo(L0, sy + sh); g.lineTo(L0 + pw, sy + sh); g.stroke();
+  g.fillStyle = cssv('--muted'); g.textAlign = 'center'; g.fillText(L('不进给', 'no feed'), (X(0.82) + X(0.91)) / 2, sy + sh - 4);
+  const ti = Math.min(n, 273) / 300, cur = pts[Math.min(n, 273)], dev = Math.round(cur[2]);
+  g.strokeStyle = cssv('--ink'); g.globalAlpha = 0.35; g.beginPath(); g.moveTo(X(ti), T0); g.lineTo(X(ti), sy + sh); g.stroke(); g.globalAlpha = 1;
   g.fillStyle = 'rgba(0,0,0,.72)'; g.fillRect(w - 190, T0 + 22, 176, 46);
-  g.fillStyle = '#5ff5a8'; g.font = '700 22px Consolas,monospace'; g.textAlign = 'right'; g.fillText((dev > 0 ? '+' : '') + dev + ' µm', w - 22, T0 + 54);
+  g.fillStyle = '#5ff5a8'; g.font = '700 22px Consolas,monospace'; g.textAlign = 'right'; g.fillText(cur[2] > A - 0.5 ? '—' : (dev > 0 ? '+' : '') + dev + ' µm', w - 22, T0 + 54);
   g.fillStyle = '#cfd8e6'; g.font = FONT; g.textAlign = 'left'; g.fillText(L('主动测量仪（简约读法）', 'in-process gauge (deviation)'), w - 184, T0 + 36);
   g.fillStyle = cssv('--accent'); g.fillText(L('-- 砂轮进给指令', '-- wheel feed command'), L0 + 8, T0 + ph - 22); g.fillStyle = cssv('--red'); g.fillText(L('— 工件实际尺寸', '— actual size'), L0 + 8, T0 + ph - 8);
 }
 function paramLoop(now) {
   PC.raf = 0; if (page !== 'params') return;
   const dt = Math.min(0.05, (now - (PC.t0 || now)) / 1000); PC.t0 = now;
-  if (PC.play) { PC.t += dt / 7; if (PC.t > 1.15) PC.t = 0; }
+  if (PC.play) { PC.t += dt / 9; if (PC.t > 1.12) PC.t = 0; }
   drawCycle();
   PC.raf = requestAnimationFrame(paramLoop);
 }
@@ -2336,10 +2346,31 @@ function renderParams() {
   $('pg-params').innerHTML = `
   <div class="g2">
     <div class="glass card">
-      <h2>${L('切入磨一个循环：为什么要光磨', 'One plunge cycle: why spark-out')} ${DEMO()}</h2>
-      <canvas id="cycCv" style="height:250px"></canvas>
-      <div class="explain" style="margin-top:8px">${L('砂轮一压上去，机床、砂轮轴、工件都会<b>弹性让刀</b>：指令已经进到了，实际还没磨到（红线落后于蓝线）。<br>粗磨进给快、去除多，精磨放慢、改善表面，最后<b>光磨（不进给）</b>，让让刀慢慢释放，把尺寸、圆度和表面磨到位，主动测量仪读数（简约读法）回到 0 才退回。光磨时间不够 → 尺寸散差大、圆度差、表面粗。',
-        'When the wheel engages, machine, spindle and part <b>deflect elastically</b>: the command has advanced but the part has not been ground yet (red lags blue).<br>Roughing removes stock fast, finishing slows down for finish, and <b>spark-out (no feed)</b> lets the deflection relax so size, roundness and finish come in; the in-process gauge returns to 0 before retracting. Too short spark-out → size scatter, poor roundness, rough finish.')}</div>
+      <h2>${L('切入磨一个循环（小沟、内径、大沟都一样）', 'One plunge-grinding cycle (inner raceway, bore, outer raceway alike)')} ${DEMO()}</h2>
+      <canvas id="cycCv" style="height:320px"></canvas>
+      <div class="explain" style="margin-top:8px">${L(
+        '<b>阶段顺序照设备画面</b>：上料 → 上磁 → 快趋 → 黑皮 → 粗磨 → 精磨 → 光磨 → 光延 → 下料。' +
+        '<ul style="margin:6px 0 0;padding-left:18px;line-height:1.7">' +
+        '<li><b>上料、上磁</b>：套圈送到位，电磁卡盘（靠山）通电吸住端面，支撑头顶好。</li>' +
+        '<li><b>快趋</b>：砂轮快速靠近工件，这时还<b>没碰到</b>，是空走，越快越省时间。</li>' +
+        '<li><b>黑皮</b>：刚碰到工件。热处理后表面有黑皮（氧化、脱碳层），而且不太圆，砂轮先只碰到高点、断续接触，实际磨掉的不多，所以这段进给还可以比粗磨快一些，尽快把黑皮和高点磨掉，过渡到整圈接触。</li>' +
+        '<li><b>粗磨</b>：整圈都接触了，用较大进给去掉大部分留量。这时<b>弹性让刀</b>最大：指令已经进到了，实际还没磨到（红线落后于蓝线）。</li>' +
+        '<li><b>精磨</b>：进给放慢，让刀变小，把圆度、波纹度和表面磨好。</li>' +
+        '<li><b>光磨</b>：进给很慢，把最后几微米一点点磨到目标尺寸。</li>' +
+        '<li><b>光延</b>：<b>停止进给</b>，砂轮继续磨一小段时间，让让刀慢慢释放、火花逐渐消失，尺寸和圆度到位；主动测量仪（简约读法）回到 0 附近。光延不够 → 尺寸散差大、圆度差、表面粗。</li>' +
+        '<li><b>下料</b>：砂轮退回，退磁，卸下套圈。</li></ul>' +
+        '<div class="note" style="margin-top:6px">叫法各厂不同：有的厂把「不进给」那段叫光磨；在这台设备的画面上，光磨是很慢的进给，不进给的停留叫光延。另外每磨一定件数会自动修整一次砂轮，修整后砂轮变小，系统会自动补偿进给。图中进给速度、进给量和时间都是示意，具体按本厂工艺。</div>',
+        '<b>Stage order as on the machine screen</b>: load → magnet on → rapid → scale → rough → finish → fine feed → dwell → unload.' +
+        '<ul style="margin:6px 0 0;padding-left:18px;line-height:1.7">' +
+        '<li><b>Load, magnet on</b>: the ring is placed, the magnetic chuck (backing plate) holds its face and the shoes are set.</li>' +
+        '<li><b>Rapid</b>: the wheel approaches fast and has <b>not touched</b> the part yet — air feed, the faster the better.</li>' +
+        '<li><b>Scale (黑皮)</b>: first contact. After heat treatment the surface has scale (oxide, decarburised layer) and is slightly out of round, so the wheel only hits high spots intermittently and removes little; this stage can feed even a little faster than roughing to clear the scale and high spots and reach full contact.</li>' +
+        '<li><b>Rough</b>: full contact; a large feed removes most of the stock. <b>Elastic deflection</b> is largest here: the command has advanced but the part lags (red behind blue).</li>' +
+        '<li><b>Finish</b>: slower feed, less deflection, roundness, waviness and surface come in.</li>' +
+        '<li><b>Fine feed (光磨)</b>: very slow feed for the last few micrometres to target size.</li>' +
+        '<li><b>Dwell (光延)</b>: <b>feed stops</b> while the wheel keeps grinding briefly, letting deflection relax and sparks die out so size and roundness settle; the in-process gauge returns near 0. Too short → size scatter, poor roundness, rough finish.</li>' +
+        '<li><b>Unload</b>: wheel retracts, chuck demagnetises, the ring is removed.</li></ul>' +
+        '<div class="note" style="margin-top:6px">Names vary: some plants call the zero-feed stage "spark-out"; on this machine screen 光磨 is a very slow feed and the zero-feed dwell is 光延. The wheel is also dressed automatically every so many parts, and the feed is compensated for the smaller wheel. Feed rates, amounts and times here are illustrative; follow your process sheets.</div>')}</div>
     </div>
     <div class="glass card">
       <h2>${L('留量（切削量）是怎么定的', 'How the grinding allowance is built up')} ${GEN()}</h2>
@@ -2436,6 +2467,7 @@ PAGES.params = {
   if (q.get('xray')) V3XRAY = q.get('xray') === '1';   // 测试用：透视开关
   if (q.get('sup')) V3SUP = q.get('sup') === '1';   // 测试用：支撑开关
   if (q.get('zm')) ZM.v = +q.get('zm');
+  if (q.get('cyc')) { PC.t = +q.get('cyc'); PC.play = false; }   // 测试用：磨削循环停在某一时刻
   if (q.get('seep')) { SEEP.ff = +q.get('seep'); if (q.get('sm')) SEEP.mode = q.get('sm'); }   // 测试用：渗流动画快进   // 测试用：放大镜初始倍数（滑块 0–100）
   if (q.get('fs')) setTimeout(toggleV3Full, 800);   // 测试用：全屏（无用户手势时走铺满窗口的替代方式）
   if (q.get('fm')) FACE_MODE = q.get('fm');   // 测试用：端面磨送料方式   // 测试用：修整方式

@@ -1211,6 +1211,107 @@ function bindZoom() {
   mountZoom($('zmHost'));
 }
 
+// ═════════ 结构页：砂轮渗流（吸液 → 停机后积在下半部 → 再开机不平衡）动画 ═════════
+// 机理来源：磨床说明书（停机前空转甩干；砂轮不转时不要开磨削液，否则只有下半部吸液）、
+// 专利 US7572175（停机后渗进砂轮的磨削液使再启动时不平衡骤增、甩干后逐渐下降）。数值和时间都是示意。
+const SEEP = { mode: 'wrong', t: 0, raf: 0, last: 0, wet: null, pores: null, ang: 0, drops: [], vib: [] };
+function seepStep(mode, t) {   // 返回当前阶段：spin 转不转、cool 磨削液开不开、caption 文字
+  const T = t % 16;
+  if (mode === 'wrong') {
+    if (T < 3) return { k: 0, spin: 1, cool: 1, cap: L('① 正常磨削：磨削液冲在砂轮上，被吸进气孔，整圈均匀湿润。', '① Grinding: coolant floods the wheel and is drawn into the pores, evenly all round.') };
+    if (T < 4) return { k: 1, spin: 0, cool: 1, cap: L('② 直接停砂轮（磨削液还没关 / 喷嘴还在滴）。', '② Wheel stopped straight away (coolant still on / nozzle dripping).') };
+    if (T < 8.5) return { k: 2, spin: 0, cool: 0, cap: L('③ 停着：气孔里的磨削液在重力作用下往下渗，越积越多，<b>下半部变重</b>。停得越久（过夜、周末）渗得越深。', '③ Standing: coolant in the pores seeps downward under gravity and <b>the lower half gets heavier</b>. The longer it stands (overnight, weekend), the deeper it soaks.') };
+    return { k: 3, spin: 1, cool: 0, cap: L('④ 重新开机：一边重一边轻 = <b>不平衡</b>，砂轮带着主轴一起振，磨出振纹、波纹度，尺寸也跳；要转一阵把液体甩出去才慢慢稳。', '④ Restart: one side heavy = <b>out of balance</b>; wheel and spindle vibrate, leaving chatter, waviness and size scatter until the liquid is flung out.') };
+  }
+  if (T < 3) return { k: 0, spin: 1, cool: 1, cap: L('① 正常磨削：磨削液被吸进气孔，整圈均匀湿润。', '① Grinding: coolant is drawn into the pores evenly all round.') };
+  if (T < 7) return { k: 1, spin: 1, cool: 0, cap: L('② <b>先关磨削液，砂轮继续空转</b>：离心力把气孔里的液体甩出去（看边上的水珠）。', '② <b>Coolant off first, wheel keeps spinning</b>: centrifugal force throws the liquid out of the pores (see the droplets).') };
+  if (T < 9) return { k: 2, spin: 0, cool: 0, cap: L('③ 甩干后再停砂轮：里面没什么液体可往下渗。', '③ Stop only after it is spun dry: little liquid is left to seep down.') };
+  return { k: 3, spin: 1, cool: 0, cap: L('④ 重新开机：轮子是匀的，振动小，开机先空转、看平衡仪读数稳定再磨。', '④ Restart: the wheel is even and runs smoothly; still idle first and wait for a steady balance reading before grinding.') };
+}
+function drawSeep(dt) {
+  const cv = $('seepCv'); if (!cv) return;
+  const { g, w, h } = prepCanvas(cv);
+  const R = Math.min(h * 0.4, w * 0.24), r0 = R * 0.3, cx0 = w * 0.3, cy0 = h * 0.5;
+  if (!SEEP.pores) { const r = rng(1115); SEEP.pores = []; for (let i = 0; i < 420; i++) { const a = r() * 6.283, rr = Math.sqrt(r0 * r0 / (R * R) + r() * (1 - r0 * r0 / (R * R))); SEEP.pores.push([a, rr, 0.6 + r() * 0.8]); } SEEP.wet = SEEP.pores.map(() => 0); }
+  const st = seepStep(SEEP.mode, SEEP.t);
+  if (st.spin) SEEP.ang += dt * (st.k === 3 && SEEP.mode === 'wrong' ? 5 : 6);
+  // 液体量：开磨削液时向均匀湿润靠拢；转动且没液时被甩干；停着时往下渗（按当前角度算世界坐标里的高度）
+  const mean = SEEP.wet.reduce((a, b) => a + b, 0) / SEEP.wet.length;
+  SEEP.pores.forEach(([a, rr], i) => {
+    const y = Math.sin(a + SEEP.ang) * rr;   // 屏幕坐标里朝下为正
+    if (st.cool && st.spin) SEEP.wet[i] += (0.75 - SEEP.wet[i]) * dt * 2;
+    else if (st.cool && !st.spin) SEEP.wet[i] += ((y > 0.2 ? 1 : 0.55) - SEEP.wet[i]) * dt * 1.5;   // 停着还在浇：下半部吸得多
+    else if (st.spin) SEEP.wet[i] -= SEEP.wet[i] * dt * (SEEP.mode === 'wrong' && st.k === 3 ? 0.55 : 0.9);
+    else { const target = Math.min(1, Math.max(0, mean * 2.1 * (0.5 + y))); SEEP.wet[i] += (target - SEEP.wet[i]) * dt * 0.9; }
+  });
+  // 不平衡 = 液体质心偏离中心的程度
+  let mx = 0, my = 0, tot = 0;
+  const mean2 = SEEP.wet.reduce((a, b) => a + b, 0) / SEEP.wet.length;   // 只算「比均匀湿润多出来/少掉的」那部分，均匀湿润不算偏重
+  SEEP.pores.forEach(([a, rr], i) => { mx += Math.cos(a + SEEP.ang) * rr * (SEEP.wet[i] - mean2); my += Math.sin(a + SEEP.ang) * rr * (SEEP.wet[i] - mean2); tot += 1; });
+  const unb = Math.hypot(mx, my) / tot, amp = st.spin ? Math.min(1, unb * 9) : 0, ph = Math.atan2(my, mx);
+  const ox = amp * R * 0.05 * Math.cos(SEEP.t * 40), oy = amp * R * 0.05 * Math.sin(SEEP.t * 40), cx = cx0 + ox, cy = cy0 + oy;
+  // 砂轮本体
+  g.fillStyle = cssv('--wheel'); g.strokeStyle = cssv('--wheel-edge'); g.lineWidth = 1.5;
+  g.beginPath(); g.arc(cx, cy, R, 0, 7); g.moveTo(cx + r0, cy); g.arc(cx, cy, r0, 0, 7, true); g.fill('evenodd'); g.stroke();
+  g.fillStyle = cssv('--steel2'); g.beginPath(); g.arc(cx, cy, r0 * 0.9, 0, 7); g.fill();
+  // 气孔：空的是深色小点，吸了液体变蓝
+  SEEP.pores.forEach(([a, rr, s], i) => { const x = cx + Math.cos(a + SEEP.ang) * rr * R, y = cy + Math.sin(a + SEEP.ang) * rr * R, wv = SEEP.wet[i];
+    g.fillStyle = `rgba(${Math.round(70 - 40 * wv)},${Math.round(70 + 70 * wv)},${Math.round(80 + 170 * wv)},${0.55 + 0.4 * wv})`; g.beginPath(); g.arc(x, y, 2.2 * s, 0, 7); g.fill(); });
+  // 磨削液喷嘴
+  if (st.cool) { g.strokeStyle = cssv('--cool'); g.lineWidth = 6; g.globalAlpha = 0.6; g.beginPath(); g.moveTo(cx0 - R * 0.2, cy0 - R * 1.35); g.lineTo(cx0 - R * 0.05, cy0 - R * 1.0); g.stroke(); g.globalAlpha = 1; }
+  // 甩出的水珠
+  if (st.spin && mean > 0.04) for (let k = 0; k < 3; k++) { const a = Math.random() * 6.283; SEEP.drops.push({ x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, vx: -Math.sin(a) * 140 + Math.cos(a) * 60, vy: Math.cos(a) * 140 + Math.sin(a) * 60, l: 0.5 }); }
+  SEEP.drops = SEEP.drops.filter(d => (d.l -= dt) > 0);
+  g.fillStyle = cssv('--cool'); SEEP.drops.forEach(d => { d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 300 * dt; g.globalAlpha = d.l * 2; g.beginPath(); g.arc(d.x, d.y, 2, 0, 7); g.fill(); }); g.globalAlpha = 1;
+  // 偏重箭头
+  if (amp > 0.05 || (!st.spin && unb > 0.01)) { const L0 = R * 0.6 * Math.min(1, unb * 12); g.strokeStyle = cssv('--red'); g.fillStyle = cssv('--red'); g.lineWidth = 3;
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(ph) * L0, cy + Math.sin(ph) * L0); g.stroke();
+    g.font = '600 12px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif'; g.fillText(L('偏重', 'heavy side'), cx + Math.cos(ph) * L0 + 6, cy + Math.sin(ph) * L0 + 4); }
+  // 右边：主轴振动曲线
+  SEEP.vib.push(amp * Math.sin(SEEP.t * 40) + (st.spin ? (Math.random() - 0.5) * 0.04 : 0)); if (SEEP.vib.length > 360) SEEP.vib.shift();
+  const gx = w * 0.6, gw = w * 0.37, gy = h * 0.52, gh = h * 0.3;
+  g.strokeStyle = cssv('--edge'); g.lineWidth = 1; g.strokeRect(gx, gy - gh / 2, gw, gh);
+  g.strokeStyle = amp > 0.3 ? cssv('--red') : cssv('--accent'); g.lineWidth = 1.5; g.beginPath();
+  SEEP.vib.forEach((v, i) => { const x = gx + i / 360 * gw, y = gy - v * gh * 0.45; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+  g.fillStyle = cssv('--muted'); g.font = FONT; g.fillText(L('主轴振动（示意）', 'spindle vibration (illustrative)'), gx, gy - gh / 2 - 8);
+  // 阶段进度
+  const T = SEEP.t % 16; g.fillStyle = cssv('--accent'); g.fillRect(gx, gy + gh / 2 + 14, gw * T / 16, 4); g.fillStyle = cssv('--edge'); g.fillRect(gx + gw * T / 16, gy + gh / 2 + 14, gw * (1 - T / 16), 4);
+  const cap = $('seepCap'); if (cap && cap.dataset.k !== SEEP.mode + st.k) { cap.innerHTML = st.cap; cap.dataset.k = SEEP.mode + st.k; }
+}
+function seepLoop(now) {
+  SEEP.raf = requestAnimationFrame(seepLoop);
+  const dt = Math.min(0.05, (now - (SEEP.last || now)) / 1000); SEEP.last = now; SEEP.t += dt; drawSeep(dt);
+}
+function startSeep() { stopSeep(); SEEP.last = 0;
+  if (SEEP.ff) { for (let i = 0; i < SEEP.ff / 0.05; i++) { SEEP.t += 0.05; drawSeep(0.05); } SEEP.ff = 0; }   // 测试用：快进到第几秒
+  SEEP.raf = requestAnimationFrame(seepLoop); }
+function stopSeep() { cancelAnimationFrame(SEEP.raf); SEEP.raf = 0; }
+function seepHTML() {
+  return `<div class="g2e">
+    <div class="glass card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">${L('砂轮渗流：停机后磨削液往下渗', 'Coolant seepage: liquid sinks after the wheel stops')} ${DEMO()}</h2>
+        ${seg('seepSeg', [['wrong', L('错误：直接停机', 'Wrong: stop straight away')], ['right', L('正确：先关液、空转甩干', 'Right: coolant off, spin dry')]], SEEP.mode)}
+      </div>
+      <canvas id="seepCv" style="height:340px;margin-top:8px"></canvas>
+      <div class="explain" id="seepCap" style="min-height:44px"></div>
+      <p class="note" style="margin:6px 0 0">${L('蓝色 = 气孔里吸了磨削液，深色 = 空气孔。动画只表示趋势，液体多少、振动大小都是示意。', 'Blue = pores holding coolant, dark = empty pores. Trends only; amounts and vibration are illustrative.')}</p>
+    </div>
+    <div class="glass card"><h2>${L('为什么会渗流？怎么防？', 'Why does it happen, and how to prevent it?')} ${GEN()}</h2><div class="explain">${L(
+      '<b>是什么</b>：陶瓷结合剂砂轮是多孔的，磨削时磨削液被吸进气孔。砂轮一停，气孔里的液体在重力作用下往下渗，积在砂轮下半部，砂轮就一边重一边轻。' +
+      '<br><b>为什么会这样</b>：<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>气孔是连通的，像海绵一样靠毛细作用吸液；</li><li>转动时离心力把液体往外甩、分布均匀，停转后只剩重力，液体往低处走；</li><li>停得越久（过夜、周末）渗得越深，开机空转也不一定马上甩得干净；</li><li>砂轮不转时开着磨削液、或喷嘴关不严一直滴，只有下半部吸液，更容易偏重。</li></ul>' +
+      '<b>后果</b>：再开机时砂轮不平衡，主轴振动，磨出振纹、波纹度、多棱，尺寸跳动，严重时测振不良；不平衡大还危险。' +
+      '<br><b>怎么防</b>：<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>停机前先关磨削液，砂轮继续空转一段时间甩干，再停砂轮</b>；</li><li>砂轮不转时不要开磨削液，喷嘴要关得严、不滴漏；</li><li>开机先空转，看动平衡仪读数稳定再磨；长时间停机后必要时重新做动平衡、修整；</li><li>空转时间按设备说明书和本厂规定执行。</li></ul>',
+      '<b>What</b>: vitrified wheels are porous and soak up coolant while grinding. Once the wheel stops, the liquid in the pores sinks under gravity and collects in the lower half — one side becomes heavier.' +
+      '<br><b>Why</b>:<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>the pores are connected and draw liquid in by capillary action, like a sponge;</li><li>while spinning, centrifugal force keeps it spread out; when stopped only gravity remains and it runs downhill;</li><li>the longer it stands (overnight, weekend) the deeper it soaks — idling may not throw it all out at once;</li><li>running coolant onto a stopped wheel, or a dripping nozzle, wets only the lower part and makes it worse.</li></ul>' +
+      '<b>Effect</b>: on restart the wheel is out of balance; the spindle vibrates, leaving chatter, waviness, lobing and size scatter, even vibration-test rejects; large imbalance is also a safety risk.' +
+      '<br><b>Prevention</b>:<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>turn the coolant off first, let the wheel idle to spin dry, then stop it</b>;</li><li>never run coolant onto a stopped wheel; nozzles must shut off cleanly without dripping;</li><li>idle first on start-up and wait for a steady balance reading; after long stops re-balance or dress if needed;</li><li>follow the machine manual and plant rules for idle times.</li></ul>')}</div>
+      <p class="note">${L('依据：磨床说明书（停机前空转甩干、砂轮不转时不要开磨削液）、磨床专利 US7572175（停机后渗进砂轮的磨削液使再启动时不平衡骤增）。', 'Sources: grinder manuals (idle to spin dry before stopping; no coolant on a stopped wheel) and patent US7572175 (coolant soaked into the wheel causes a sharp imbalance on restart).')}</p>
+    </div>
+  </div>`;
+}
+function bindSeep() { if (!$('seepSeg')) return; bindSeg('seepSeg', v => { SEEP.mode = v; SEEP.t = 0; SEEP.vib = []; SEEP.wet = SEEP.pores ? SEEP.pores.map(() => 0) : null; }); startSeep(); }
+
 // ═════════ 结构页：五要素 + 微观结构 + 规格标记 + 常见误解 ═════════
 // 粒度 → 磨粒平均尺寸（近似值）：F 号按 ISO 8486 量级，# 号微粉按 JIS R6001 量级；只用于示意比例
 const GRITS = [
@@ -1311,6 +1412,7 @@ function renderStructure() {
         '<li><b>Formed profiles</b>: the wheel can be dressed to the raceway arc and plunge the groove shape in one go.</li></ul>')}</div></div>
     </div>
   </div>
+  ${seepHTML()}
   <div class="g2">
     <div class="glass card">
       <div class="row" style="justify-content:space-between">
@@ -1374,6 +1476,7 @@ function renderStructure() {
   [['sGrit', 'grit'], ['sGrade', 'grade'], ['sStruct', 'struct']].forEach(([id, k]) => $(id).oninput = e => { ST[k] = +e.target.value; save(); updStructure(); });
   updStructure();
   bindZoom();
+  bindSeep();
 }
 // 滑块拖动时只更新文字和画布，不重建控件
 function updStructure() {
@@ -1389,7 +1492,7 @@ function updStructure() {
     <b>${L('组织号', 'Structure')} ${ST.struct}</b>：${L('磨粒排得多密。号越大越疏松，气孔越多，容屑、通冷却液越好，但单位面积参与切削的磨粒少。', 'how densely grains are packed. Higher number = more open, more pores for chips and coolant, but fewer cutting grains per area.')}</div>`;
   requestAnimationFrame(drawMicro);
 }
-PAGES.structure = { render: renderStructure, redraw: drawMicro, enter: () => { requestAnimationFrame(drawMicro); if (!ZM.r && $('zmHost')) mountZoom($('zmHost')); }, leave: disposeZoom };
+PAGES.structure = { render: renderStructure, redraw: drawMicro, enter: () => { requestAnimationFrame(drawMicro); if (!ZM.r && $('zmHost')) mountZoom($('zmHost')); if (!SEEP.raf && $('seepCv')) startSeep(); }, leave: () => { disposeZoom(); stopSeep(); } };
 
 // ═════════ 微观页：单颗磨粒切削、砂轮表面状态、超精、脏东西在哪 ═════════
 const MC = { h: 1.6, bond: 'mid', raf: 0, t0: 0, life: null, sfT: 0, sfPlay: true, osc: 1, spd: 1 };
@@ -2332,7 +2435,8 @@ PAGES.params = {
   if (q.get('cl')) CL.kind = q.get('cl');   // 测试用：冷却页介质
   if (q.get('xray')) V3XRAY = q.get('xray') === '1';   // 测试用：透视开关
   if (q.get('sup')) V3SUP = q.get('sup') === '1';   // 测试用：支撑开关
-  if (q.get('zm')) ZM.v = +q.get('zm');   // 测试用：放大镜初始倍数（滑块 0–100）
+  if (q.get('zm')) ZM.v = +q.get('zm');
+  if (q.get('seep')) { SEEP.ff = +q.get('seep'); if (q.get('sm')) SEEP.mode = q.get('sm'); }   // 测试用：渗流动画快进   // 测试用：放大镜初始倍数（滑块 0–100）
   if (q.get('fs')) setTimeout(toggleV3Full, 800);   // 测试用：全屏（无用户手势时走铺满窗口的替代方式）
   if (q.get('fm')) FACE_MODE = q.get('fm');   // 测试用：端面磨送料方式   // 测试用：修整方式
   renderChrome();

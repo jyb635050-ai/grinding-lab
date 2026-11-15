@@ -1498,6 +1498,71 @@ function updStructure() {
 }
 PAGES.structure = { render: renderStructure, redraw: drawMicro, enter: () => { requestAnimationFrame(drawMicro); if (!ZM.r && $('zmHost')) mountZoom($('zmHost')); if (!SEEP.raf && $('seepCv')) startSeep(); }, leave: () => { disposeZoom(); stopSeep(); } };
 
+// ═════════ 微观页：磨削烧伤——表层温度 → 回火烧伤 / 二次淬火烧伤 ═════════
+// 温度、深度都是示意值；轴承钢回火温度一般在一两百摄氏度，相变温度在 750 °C 量级（通识，按材料和热处理工艺不同而不同）
+const BURN = { v: 35 };
+const BT = { temper: 180, trans: 750 };   // 示意阈值 °C
+function burnState(v) { const Ts = 80 + v / 100 * 1020; return { Ts, d: 40 + v * 1.4 }; }   // 表面最高温度、热影响深度（µm，示意）
+function drawBurn() {
+  const cv = $('burnCv'); if (!cv) return;
+  const { g, w, h } = prepCanvas(cv), { Ts, d } = burnState(BURN.v);
+  const T = z => 25 + (Ts - 25) * Math.exp(-z / d);   // 表面往里温度按指数下降
+  const zMax = 400, L0 = 150, R0 = 16, T0 = 26, B0 = 34, pw = w - L0 - R0, ph = h - T0 - B0;
+  const X = z => L0 + z / zMax * pw, Y = t => T0 + ph - t / 1150 * ph;
+  // 左边：套圈表层截面（酸洗后的样子示意）——白层 = 二次淬火，深色 = 回火软化，灰 = 正常
+  const zHard = T(0) > BT.trans ? -d * Math.log((BT.trans - 25) / (Ts - 25)) : 0;
+  const zTemp = T(0) > BT.temper ? -d * Math.log((BT.temper - 25) / (Ts - 25)) : 0;
+  const sx = 24, sw = 92, depthPx = z => T0 + z / zMax * ph;
+  g.fillStyle = '#8d939c'; g.fillRect(sx, T0, sw, ph);
+  if (zTemp > 0) { g.fillStyle = '#3b3f46'; g.fillRect(sx, T0, sw, depthPx(zTemp) - T0); }
+  if (zHard > 0) { g.fillStyle = '#f2f2ee'; g.fillRect(sx, T0, sw, depthPx(zHard) - T0); }
+  g.strokeStyle = cssv('--edge'); g.strokeRect(sx, T0, sw, ph);
+  g.fillStyle = cssv('--ink'); g.font = '600 12px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif'; g.textAlign = 'center';
+  g.fillText(L('表面', 'surface'), sx + sw / 2, T0 - 8); g.fillText(L('↓ 往里', '↓ inward'), sx + sw / 2, T0 + ph + 18);
+  g.font = FONT; g.fillStyle = cssv('--muted'); g.fillText(L('酸洗后截面（示意）', 'section after etch (illus.)'), sx + sw / 2, T0 + ph + 30);
+  // 右边：温度沿深度的分布
+  g.strokeStyle = cssv('--axis'); g.beginPath(); g.moveTo(L0, T0); g.lineTo(L0, T0 + ph); g.lineTo(L0 + pw, T0 + ph); g.stroke();
+  [[BT.trans, L('相变温度（750 °C 量级）：超过 → 二次淬火', 'transformation (~750 °C): above → rehardening'), cssv('--red')], [BT.temper, L('回火温度（一两百 °C）：超过 → 回火软化', 'tempering temp (~150–200 °C): above → softening'), cssv('--orange')]].forEach(([t, s, c]) => {
+    g.strokeStyle = c; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(L0, Y(t)); g.lineTo(L0 + pw, Y(t)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = c; g.textAlign = 'right'; g.fillText(s, L0 + pw - 4, Y(t) - 5); });
+  g.strokeStyle = cssv('--red'); g.lineWidth = 2.4; g.beginPath();
+  for (let z = 0; z <= zMax; z += 4) { const x = X(z), y = Y(T(z)); z ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); g.lineWidth = 1;
+  g.fillStyle = cssv('--muted'); g.textAlign = 'center'; g.fillText(L('离表面的深度（示意）→', 'depth below surface (illus.) →'), L0 + pw / 2, T0 + ph + 18);
+  g.save(); g.translate(L0 - 14, T0 + ph / 2); g.rotate(-Math.PI / 2); g.fillText(L('温度（示意）', 'temperature (illus.)'), 0, 0); g.restore();
+  g.textAlign = 'left'; g.fillStyle = cssv('--ink'); g.font = '700 13px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+  g.fillText(L(`表面最高约 ${Math.round(Ts)} °C`, `surface peak ≈ ${Math.round(Ts)} °C`), L0 + 10, Y(Ts) + (Ts > 1000 ? 18 : -8));
+  const st = zHard > 0 ? ['r', L('二次淬火烧伤：最表面重新淬硬成又硬又脆的「白层」，下面紧挨着一层回火软化层。最危险，容易出磨削裂纹。', 'Rehardening burn: the very surface re-hardens into a hard, brittle "white layer", with an over-tempered soft layer beneath. Most dangerous — prone to grinding cracks.')]
+    : zTemp > 0 ? ['o', L('回火烧伤：表层被再次回火，硬度下降、变软，表层还留下拉应力。肉眼一般看不出来，要酸洗才看得到（发暗）。', 'Temper burn: the surface layer is re-tempered — softer, with tensile residual stress. Usually invisible; shows up dark after temper etch.')]
+    : ['g', L('正常：表层温度没超过回火温度，组织和硬度不变。', 'Normal: the surface stays below the tempering temperature; structure and hardness unchanged.')];
+  const sb = $('burnState'); if (sb) { sb.className = 'explain'; sb.innerHTML = `<b style="color:${st[0] === 'r' ? 'var(--red)' : st[0] === 'o' ? 'var(--orange)' : 'var(--green)'}">${st[1]}</b>`; }
+}
+function burnHTML() {
+  return `<div class="g2e">
+    <div class="glass card ctl">
+      <h2>${L('磨削烧伤：表层被磨削热「再热处理」', 'Grinding burn: the surface gets "re-heat-treated" by grinding heat')} ${DEMO()}</h2>
+      <canvas id="burnCv" style="height:300px"></canvas>
+      <div class="grp" style="margin-top:8px"><div class="lab">${L('磨削区热量（进给太快、砂轮钝 / 堵、冷却不足都会让它升高）', 'heat in the grinding zone (raised by heavy feed, dull / loaded wheel, poor cooling)')}</div>
+        <input type="range" id="burnS" min="0" max="100" value="${BURN.v}"></div>
+      <div class="explain" id="burnState"></div>
+      <p class="note" style="margin:6px 0 0">${L('温度、深度都是示意；回火温度和相变温度随钢种和热处理工艺不同而不同。', 'Temperatures and depths are illustrative; tempering and transformation temperatures depend on the steel and its heat treatment.')}</p>
+    </div>
+    <div class="glass card"><h2>${L('什么是烧伤？为什么会烧伤？怎么避免？', 'What is burn, why does it happen, how to avoid it?')} ${GEN()}</h2><div class="explain">${L(
+      '<b>什么是烧伤</b>：套圈淬火、回火后硬度已经定好。磨削时如果磨削区温度太高，表面薄薄一层就被<b>重新热处理</b>了：' +
+      '<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>回火烧伤</b>：温度超过原来的回火温度，表层再次回火，<b>变软</b>，并留下拉应力；</li><li><b>二次淬火烧伤</b>：温度更高、超过相变温度，最表层又被淬硬成很脆的「白层」，下面紧挨着一层软化层，容易产生<b>磨削裂纹</b>。</li></ul>' +
+      '烧伤一般<b>肉眼看不出来</b>（严重时才有黄、蓝色），要用<b>酸洗（ISO 14104）</b>或巴克豪森噪声检测。烧伤的套圈装成轴承后，表层软、有拉应力或裂纹，会<b>提前疲劳剥落</b>，所以是轴承的关键缺陷。' +
+      '<br><b>为什么会烧伤</b>：磨粒是负前角的小刀，切削时有大量摩擦和挤压，磨削消耗的能量绝大部分变成热，集中在很小的接触区里，其中相当一部分传进工件表面。热量来不及被磨削液带走，表层温度就会冲过回火温度甚至相变温度。常见原因：' +
+      '<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>砂轮钝化、堵塞</b>：磨粒不切只蹭，发热猛增；修整不及时或修得太细；</li><li><b>砂轮太硬、组织太紧</b>：钝了的磨粒不脱落，气孔少、容屑和通液差；</li><li><b>进给太快、留量太大</b>：单位时间去除多，热量大；</li><li><b>冷却不足</b>：流量、压力不够，喷嘴没对准楔形入口，浓度不对，磨削液太热或太脏；</li><li><b>接触弧长</b>：内径磨砂轮小、接触弧长、冷却液难进去，是高发工序。</li></ul>' +
+      '<b>怎么避免</b>：<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>按规定间隔修整砂轮，保持锋利；修整参数不要修得太细；</li><li>选合适硬度、组织的砂轮（磨淬硬钢一般偏软、组织适当疏松）；</li><li>粗、精磨分开，留量分配合理，进给不超过工艺规定；</li><li>磨削液流量、压力、浓度、温度、过滤都按要求，喷嘴对准砂轮和工件的楔形入口；</li><li>首件和定期做酸洗检查，有烧伤立刻隔离、追溯同批，找到产生原因再恢复生产。</li></ul>',
+      '<b>What it is</b>: the ring\'s hardness is set by hardening and tempering. If the grinding zone gets too hot, a thin surface layer is <b>heat-treated again</b>:' +
+      '<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>Temper burn</b>: above the original tempering temperature the layer is re-tempered — <b>softer</b>, with tensile residual stress;</li><li><b>Rehardening burn</b>: hotter still, above the transformation temperature, the very surface re-hardens into a brittle "white layer" over a softened layer, prone to <b>grinding cracks</b>.</li></ul>' +
+      'Burn is usually <b>invisible to the eye</b> (only severe burn shows straw / blue colours); it is found by <b>temper etch (ISO 14104)</b> or Barkhausen noise. A burnt ring in a bearing has a soft, tensile or cracked surface and <b>fails early by fatigue spalling</b> — a critical defect.' +
+      '<br><b>Why it happens</b>: grains are negative-rake tools with heavy rubbing and ploughing; most of the grinding energy becomes heat concentrated in a tiny contact zone, and a large share flows into the part. If coolant cannot carry it away, the surface overshoots the tempering or even transformation temperature. Typical causes:' +
+      '<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>dull or loaded wheel</b>: grains rub instead of cutting; dressing too late or too fine;</li><li><b>wheel too hard / too dense</b>: dull grains are not released, few pores for chips and coolant;</li><li><b>feed too high, stock too large</b>: more removal per second, more heat;</li><li><b>poor cooling</b>: low flow or pressure, nozzle not aimed at the entry wedge, wrong concentration, hot or dirty coolant;</li><li><b>long contact arc</b>: bore grinding — small wheel, long arc, hard for coolant to enter — is a hot spot.</li></ul>' +
+      '<b>How to avoid it</b>:<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>dress at the set interval to keep the wheel sharp; avoid over-fine dressing;</li><li>choose a suitable grade and structure (for hardened steel usually on the soft side, reasonably open);</li><li>separate roughing and finishing, split stock sensibly, never exceed the specified feed;</li><li>keep coolant flow, pressure, concentration, temperature and filtration in spec, nozzles aimed at the entry wedge;</li><li>temper-etch first-off and periodic parts; on any burn, quarantine, trace the batch and fix the root cause before restarting.</li></ul>')}</div></div>
+  </div>`;
+}
+function bindBurn() { const s = $('burnS'); if (!s) return; s.oninput = e => { BURN.v = +e.target.value; drawBurn(); }; requestAnimationFrame(drawBurn); }
+
 // ═════════ 微观页：单颗磨粒切削、砂轮表面状态、超精、脏东西在哪 ═════════
 const MC = { h: 1.6, bond: 'mid', raf: 0, t0: 0, life: null, sfT: 0, sfPlay: true, osc: 1, spd: 1 };
 
@@ -1676,6 +1741,7 @@ function microLoop(now) {
 
 function renderMicro() {
   $('pg-micro').innerHTML = `
+  ${burnHTML()}
   <div class="g2e">
     <div class="glass card ctl">
       <h2>${L('一颗磨粒怎样切削', 'How a single grain cuts')} ${GEN()}</h2>
@@ -1740,12 +1806,13 @@ function renderMicro() {
   $('oscS').oninput = e => { MC.osc = +e.target.value; oscU(); }; $('spdS').oninput = e => { MC.spd = +e.target.value; oscU(); }; oscU();
   $('sfPlay').onclick = () => { if (MC.sfT >= 1) MC.sfT = 0; MC.sfPlay = !MC.sfPlay; $('sfPlay').textContent = MC.sfPlay ? '⏸ ' + L('暂停', 'Pause') : '▶ ' + L('继续', 'Play'); };
   $('sfT').oninput = e => { MC.sfT = e.target.value / 100; MC.sfPlay = false; $('sfPlay').textContent = '▶ ' + L('继续', 'Play'); };
+  bindBurn();
 }
 PAGES.micro = {
   render: renderMicro,
   enter() { MC.t0 = 0; if (!MC.raf) MC.raf = requestAnimationFrame(microLoop); },
   leave() { if (MC.raf) cancelAnimationFrame(MC.raf); MC.raf = 0; },
-  redraw() { const n = performance.now(); drawGrain(n); drawLife(0); drawSF(); }
+  redraw() { const n = performance.now(); drawGrain(n); drawLife(0); drawSF(); drawBurn(); }
 };
 
 // ═════════ 修整页：为什么修整、三种修整方式、修整参数原理 ═════════
@@ -1763,8 +1830,8 @@ function dressMethods() {
     },
     disc: {
       name: L('金刚碟片（旋转修整盘）', 'Rotary diamond disc'),
-      how: L('薄圆盘外圆一圈电镀或烧结金刚石，<b>竖着装</b>，碟片轴和砂轮轴平行，由电主轴带着<b>自己旋转</b>。从砂轮剖面（或俯视）看，碟片是侧着的一片，刃口顶在砂轮轮廓上，样子和金刚笔一样。数控轴驱动碟片沿砂轮轮廓走路径（和金刚笔一样靠路径成形），但接触点一直在换，磨损分摊到整圈。',
-        'A thin disc with diamond plated or sintered around its rim, <b>mounted upright</b> with its spindle parallel to the wheel spindle and <b>driven to rotate</b>. Seen in the wheel section (or from above) it is edge-on, its rim touching the wheel profile just like a pen tip. CNC axes move it along the wheel profile (path-generated, like the pen), but the contact point keeps changing so wear is spread round the rim.'),
+      how: L('薄圆盘外圆一圈电镀或烧结金刚石，<b>竖着装</b>，碟片轴和砂轮轴平行，由电主轴带着<b>自己旋转</b>。从砂轮剖面（或俯视）看，碟片是侧着的一片，刃口顶在砂轮轮廓上，样子和金刚笔一样；而且<b>修整动作也和金刚笔一样</b>：装在摆动机构上，绕轮缘圆弧的圆心摆动，刃口始终对着轮廓走。数控轴驱动碟片沿砂轮轮廓走路径（和金刚笔一样靠路径成形），但接触点一直在换，磨损分摊到整圈。',
+        'A thin disc with diamond plated or sintered around its rim, <b>mounted upright</b> with its spindle parallel to the wheel spindle and <b>driven to rotate</b>. Seen in the wheel section (or from above) it is edge-on, its rim touching the wheel profile just like a pen tip — and it <b>moves just like the pen</b>: on a swivel, pivoting about the centre of the rim arc so the rim always faces the profile. CNC axes move it along the wheel profile (path-generated, like the pen), but the contact point keeps changing so wear is spread round the rim.'),
       plus: [L('灵活：一片碟片可以修不同 R、不同轮廓，换型只改程序', 'flexible: one disc dresses many radii and profiles — only the program changes'), L('寿命比金刚笔长得多，轮廓精度和一致性更好', 'far longer life than a pen, better profile accuracy and consistency'), L('可调速比和方向，控制修出来的锋利度', 'speed ratio and direction can be set to tune sharpness')],
       minus: [L('需要数控修整轴和修整电主轴，设备投入高', 'needs CNC dressing axes and a dresser spindle — higher investment'), L('要走路径，修整时间比滚轮长', 'path traversing takes longer than a roll'), L('碟片本身较贵，碰撞或崩边就报废', 'discs are costly and scrapped if chipped or crashed')],
       use: L('沟道成型砂轮，尤其多品种、经常换型的线', 'formed raceway wheels, especially on multi-product lines with frequent changeover')
@@ -1823,19 +1890,22 @@ function drawDress(dt) {
       g.fillStyle = '#8f99aa'; g.fillRect(-6, 6, 12, L0); g.fillStyle = '#bfe9ff'; g.beginPath(); g.moveTo(-6, 6); g.lineTo(6, 6); g.lineTo(0, -2); g.closePath(); g.fill(); g.strokeStyle = '#4aa8d8'; g.stroke(); g.restore();
       g.fillStyle = cssv('--muted'); g.fillText(L('金刚笔：固定不转，沿轮廓一点点走', 'pen: not rotating, traverses the profile'), 12, 18);
     } else {
-      // 碟片竖着装：轴线和砂轮轴平行（图里是水平的），所以这个剖面里碟片是侧着看的——一片竖着的薄片，
-      // 外缘（修成小圆弧、镶金刚石）顶在砂轮轮廓上，样子和金刚笔一样；碟片只平移、不改变朝向
-      const rt = R * 0.22, Hd = R * 1.55, tx = px + nx * rt, ty = py + ny * rt;   // 刃口圆心
+      // 碟片竖着装、碟片轴和砂轮轴平行；和金刚笔一样装在摆动机构上，绕轮缘圆弧的圆心摆动，
+      // 刃口始终对着轮廓法线走——所以动作和金刚笔完全一样，只是刃口是一片在自转的薄碟
+      const rt = R * 0.2, Hd = R * 1.05, ang = Math.atan2(ny, nx) - Math.PI / 2;
+      g.save(); g.translate(px, py); g.rotate(ang);
       g.fillStyle = '#9aa4b4'; g.strokeStyle = '#5d6776';
-      g.beginPath(); g.arc(tx, ty, rt, Math.PI, 0); g.lineTo(tx + rt, ty + Hd); g.arc(tx, ty + Hd, rt, 0, Math.PI); g.closePath(); g.fill(); g.stroke();
-      g.strokeStyle = '#bfe9ff'; g.lineWidth = 5; g.beginPath(); g.arc(tx, ty, rt - 1, Math.PI, 0); g.stroke(); g.beginPath(); g.arc(tx, ty + Hd, rt - 1, 0, Math.PI); g.stroke(); g.lineWidth = 1;
-      // 碟片轴（水平，和砂轮轴平行）+ 修整电主轴
-      const ay = ty + Hd / 2; g.fillStyle = cssv('--steel2'); g.fillRect(tx - R * 1.6, ay - 4, R * 3.2, 8);
-      g.fillStyle = '#5d6776'; g.fillRect(tx + R * 1.6, ay - 12, R * 0.9, 24);
+      g.beginPath(); g.arc(0, rt, rt, Math.PI, 0); g.lineTo(rt, rt + Hd); g.arc(0, rt + Hd, rt, 0, Math.PI); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = '#bfe9ff'; g.lineWidth = 5; g.beginPath(); g.arc(0, rt, rt - 1, Math.PI, 0); g.stroke(); g.beginPath(); g.arc(0, rt + Hd, rt - 1, 0, Math.PI); g.stroke(); g.lineWidth = 1;
+      const ay = rt + Hd / 2; g.fillStyle = cssv('--steel2'); g.fillRect(-R * 1.3, ay - 4, R * 2.6, 8);
       g.strokeStyle = cssv('--accent'); g.lineWidth = 2; g.setLineDash([5, 5]); g.lineDashOffset = -DR.t * 40;
-      g.beginPath(); g.ellipse(tx - R * 0.9, ay, 7, Hd / 2 + 4, 0, 0, 7); g.stroke(); g.setLineDash([]); g.lineWidth = 1;
-      g.fillStyle = cssv('--muted'); g.fillText(L('碟片轴（和砂轮轴平行）', 'disc spindle (parallel to wheel spindle)'), tx + R * 2.6, ay + 4);
-      g.fillText(L('金刚碟片：竖着装、轴线和砂轮轴平行；侧面看像金刚笔，自己旋转，数控沿轮廓走路径', 'disc: mounted upright, axis parallel to the wheel; seen side-on like a pen, rotating, moved along the path by CNC'), 12, 18);
+      g.beginPath(); g.ellipse(-R * 0.8, ay, 6, Hd / 2 + 4, 0, 0, 7); g.stroke(); g.setLineDash([]); g.lineWidth = 1;
+      g.restore();
+      // 摆动示意：绕轮缘圆弧圆心的虚线弧
+      g.strokeStyle = cssv('--faint'); g.setLineDash([3, 4]); g.beginPath(); g.arc(cx, cy, R * 1.75, Math.PI / 2 - A, Math.PI / 2 + A); g.stroke(); g.setLineDash([]);
+      g.fillStyle = cssv('--muted'); g.font = FONT; g.textAlign = 'left';
+      g.fillText(L('碟片和碟片轴一起摆，刃口始终对着轮廓', 'disc and spindle swing together; the rim always faces the profile'), cx + R * 2.3, cy + R * 1.2);
+      g.fillText(L('金刚碟片：动作和金刚笔一样，绕圆弧圆心摆动走轮廓；不同的是碟片自己在转', 'disc: same motion as the pen — swings about the arc centre along the profile; the difference is that the disc spins'), 12, 18);
     }
   } else {
     // 滚轮：凹 R，整轮廓径向切入
@@ -2467,6 +2537,7 @@ PAGES.params = {
   if (q.get('xray')) V3XRAY = q.get('xray') === '1';   // 测试用：透视开关
   if (q.get('sup')) V3SUP = q.get('sup') === '1';   // 测试用：支撑开关
   if (q.get('zm')) ZM.v = +q.get('zm');
+  if (q.get('burn')) BURN.v = +q.get('burn');   // 测试用：烧伤滑块
   if (q.get('cyc')) { PC.t = +q.get('cyc'); PC.play = false; }   // 测试用：磨削循环停在某一时刻
   if (q.get('seep')) { SEEP.ff = +q.get('seep'); if (q.get('sm')) SEEP.mode = q.get('sm'); }   // 测试用：渗流动画快进   // 测试用：放大镜初始倍数（滑块 0–100）
   if (q.get('fs')) setTimeout(toggleV3Full, 800);   // 测试用：全屏（无用户手势时走铺满窗口的替代方式）

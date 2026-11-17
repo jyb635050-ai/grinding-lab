@@ -1846,9 +1846,9 @@ function drawCB() {
   g.fillStyle = cssv('--steel2'); g.beginPath(); g.moveTo(lx - R * 0.5, ly); g.lineTo(lx, ly);
   for (let th = -phiM; th <= phiM + 1e-6; th += 0.01) g.lineTo(...P(th));
   g.lineTo(rx + R * 0.5, ry); g.lineTo(rx + R * 0.5, base); g.lineTo(lx - R * 0.5, base); g.closePath(); g.fill();
-  // 显示剂：没被刮掉的地方是蓝色厚层，刮掉的地方露出金属
+  // 显示剂：没被刮掉的地方是红色厚层，刮掉的地方露出金属
   for (let th = -phiM; th < phiM; th += 0.005) { const scraped = gap(th) < t; const [x1, y1] = P(th), [x2, y2] = P(th + 0.005);
-    g.strokeStyle = scraped ? '#e8edf3' : '#2f6fe0'; g.lineWidth = scraped ? 2 : 5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
+    g.strokeStyle = scraped ? '#e8edf3' : '#d8342a'; g.lineWidth = scraped ? 2 : 5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
   // 检查球
   g.fillStyle = 'rgba(200,208,220,.85)'; g.strokeStyle = '#6b7686'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, oy, rb, 0, 7); g.fill(); g.stroke();
   g.fillStyle = '#5d6776'; g.fillRect(cx - 4, oy - rb - 18, 8, 18);   // 手柄
@@ -1857,10 +1857,10 @@ function drawCB() {
   // 右边：沟道展开俯视（沿圆周拉直），看留色的位置
   const sx = w * 0.6, sw = w * 0.36, sy = h * 0.2, sh = h * 0.56;
   g.fillStyle = cssv('--muted'); g.font = FONT; g.textAlign = 'left'; g.fillText(L('沟道展开俯视（刮完后看到的样子）', 'raceway unrolled, seen from above (after scraping)'), sx, sy - 10);
-  for (let k = 0; k < 120; k++) { const th = -phiM + 2 * phiM * k / 120, y = sy + sh * k / 120; g.fillStyle = gap(th) < t ? '#dfe5ec' : '#2f6fe0'; g.fillRect(sx, y, sw, sh / 120 + 1); }
+  for (let k = 0; k < 120; k++) { const th = -phiM + 2 * phiM * k / 120, y = sy + sh * k / 120; g.fillStyle = gap(th) < t ? '#dfe5ec' : '#d8342a'; g.fillRect(sx, y, sw, sh / 120 + 1); }
   g.strokeStyle = cssv('--edge'); g.strokeRect(sx, sy, sw, sh);
   g.fillStyle = cssv('--muted'); g.textAlign = 'right'; g.fillText(L('挡边侧', 'shoulder'), sx - 6, sy + 10); g.fillText(L('沟底', 'bottom'), sx - 6, sy + sh / 2 + 4); g.fillText(L('挡边侧', 'shoulder'), sx - 6, sy + sh - 2);
-  g.textAlign = 'left'; g.fillStyle = '#2f6fe0'; g.fillRect(sx, sy + sh + 14, 12, 10); g.fillStyle = cssv('--muted'); g.fillText(L('留色（没接触）', 'colour left (no contact)'), sx + 16, sy + sh + 23);
+  g.textAlign = 'left'; g.fillStyle = '#d8342a'; g.fillRect(sx, sy + sh + 14, 12, 10); g.fillStyle = cssv('--muted'); g.fillText(L('留色（没接触）', 'colour left (no contact)'), sx + 16, sy + sh + 23);
   g.fillStyle = '#dfe5ec'; g.fillRect(sx + sw * 0.5, sy + sh + 14, 12, 10); g.strokeStyle = cssv('--edge'); g.strokeRect(sx + sw * 0.5, sy + sh + 14, 12, 10); g.fillStyle = cssv('--muted'); g.fillText(L('刮掉（接触）', 'scraped (contact)'), sx + sw * 0.5 + 16, sy + sh + 23);
   const lab = CB.dev < -1 ? L('实际 R：低于下限', 'actual R: below lower limit') : CB.dev > 1 ? L('实际 R：高于上限', 'actual R: above upper limit') : L('实际 R：在上下限之间', 'actual R: within limits');
   const vb = $('cbVal'); if (vb) vb.textContent = lab;
@@ -1882,18 +1882,18 @@ function ballHTML() {
     </div>
     <div class="glass card"><h2>${L('刮色球：方法、原理、看留色判问题', 'Colour-ball test: method, principle, reading the marks')} ${GEN()}</h2><div class="explain">${L(
       '<b>两个球怎么选</b>：沟曲率要求 R<sub>min</sub>～R<sub>max</sub>，就用两个检查球：<b>小球直径 = 2 × R<sub>min</sub></b>，<b>大球直径 = 2 × R<sub>max</sub></b>（球的半径正好等于下限和上限）。检查球本身要定期检定直径和圆度。' +
-      '<br><b>怎么做</b>：<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>沟道擦干净，薄薄、均匀地涂一层显示剂（如红丹、普鲁士蓝）；</li><li>手持检查球放进沟道，轻压，沿沟道来回推一小段；</li><li>拿开球，看沟道上哪里被刮掉（接触）、哪里还留着颜色（没接触）；</li><li>小球、大球各做一次。</li></ul>' +
+      '<br><b>怎么做</b>：<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>沟道擦干净，薄薄、均匀地涂一层红色显示剂（如红丹）；</li><li>手持检查球放进沟道，轻压，沿沟道来回推一小段；</li><li>拿开球，看沟道上哪里被刮掉（接触）、哪里还留着颜色（没接触）；</li><li>小球、大球各做一次。</li></ul>' +
       '<b>原理</b>：<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>球比沟「小」（球半径 &lt; 沟曲率半径）→ 球落到沟底，只在<b>中间</b>接触，两边留色；</li><li>球比沟「大」（球半径 &gt; 沟曲率半径）→ 球下不去，坐在两边，只在<b>两侧</b>接触，沟底留色；</li><li>一样大 → 整个沟面都刮掉。</li></ul>' +
       '<b>合格的样子</b>：小球中间刮掉、两边留色；大球两边刮掉、沟底留色。两关都过 → 沟曲率在 R<sub>min</sub>～R<sub>max</sub> 之间。' +
       '<br><b>看留色判问题</b>：<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>小球</b>反而两边刮掉、<b>沟底留色</b> → 曲率半径小于下限，沟太紧；</li><li><b>大球</b>反而中间刮掉、<b>两边留色</b> → 曲率半径大于上限，沟太开；</li><li>刮掉的印子<b>偏向一边</b>、或两条印子一宽一窄 → 沟形不对称（修整圆弧中心偏、修整器对刀偏），会影响沟位置和接触角；</li><li>印子沿圆周<b>断断续续、宽窄变化</b> → 沟道一圈不均匀（如圆度差、沟位置摆动），要上仪器确认。</li></ul>' +
       '<div class="note" style="margin-top:6px">刮色是现场快速的定性判断：显示剂要薄而均匀，太厚会盖住微米级的差别；球和沟道都要干净；压力要轻、均匀。沟曲率的具体数值以轮廓仪测量为准。</div>',
       '<b>Choosing the balls</b>: for a groove radius spec R<sub>min</sub>–R<sub>max</sub>, use <b>small ball diameter = 2 × R<sub>min</sub></b> and <b>large ball diameter = 2 × R<sub>max</sub></b> (ball radius equals the lower and upper limit). Calibrate the balls periodically for size and roundness.' +
-      '<br><b>How</b>:<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>clean the raceway and apply a thin, even film of marking compound (red lead, Prussian blue);</li><li>hold the ball in the groove, press lightly and slide it back and forth a short way;</li><li>lift it and look where the colour is scraped off (contact) and where it remains (no contact);</li><li>repeat with both balls.</li></ul>' +
+      '<br><b>How</b>:<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>clean the raceway and apply a thin, even film of red marking compound (e.g. red lead);</li><li>hold the ball in the groove, press lightly and slide it back and forth a short way;</li><li>lift it and look where the colour is scraped off (contact) and where it remains (no contact);</li><li>repeat with both balls.</li></ul>' +
       '<b>Principle</b>:<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li>ball "smaller" than the groove (ball radius &lt; groove radius) → it drops to the bottom and touches only in the <b>middle</b>;</li><li>ball "larger" (ball radius &gt; groove radius) → it cannot reach the bottom and sits on <b>both sides</b>, leaving colour at the bottom;</li><li>equal → the whole groove is scraped.</li></ul>' +
       '<b>Good result</b>: small ball scrapes the middle, large ball scrapes both sides. Both pass → groove radius is between R<sub>min</sub> and R<sub>max</sub>.' +
       '<br><b>Reading the marks</b>:<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>small ball</b> scrapes both sides, <b>colour left at the bottom</b> → radius below the lower limit, groove too tight;</li><li><b>large ball</b> scrapes the middle, <b>colour left on the sides</b> → radius above the upper limit, groove too open;</li><li>mark <b>off to one side</b>, or two marks of unequal width → asymmetric groove form (dressing arc centre or dresser set-up off), affecting groove position and contact angle;</li><li>mark <b>intermittent or varying</b> around the circumference → the groove is not uniform around the ring (e.g. roundness, groove position wobble) — confirm on instruments.</li></ul>' +
       '<div class="note" style="margin-top:6px">The colour test is a quick qualitative shop check: keep the film thin and even (a thick film hides micrometre differences), keep ball and raceway clean, press lightly and evenly. The actual radius is decided by contour measurement.</div>')}</div>
-      <p class="note">${L('涂显示剂看钢球接触印子的方法见检查球厂商资料（球规涂普鲁士蓝看接触痕迹）；大小球分别对应上下限是按几何关系推出的做法。', 'Using marking compound on a ball gauge to read contact marks is described by ball-gauge makers; pairing balls with the upper and lower limits follows from the geometry.')}</p>
+      <p class="note">${L('涂显示剂看钢球接触印子的方法见检查球厂商资料；大小球分别对应上下限是按几何关系推出的做法。', 'Using marking compound on a ball gauge to read contact marks is described by ball-gauge makers; pairing balls with the upper and lower limits follows from the geometry.')}</p>
     </div>
   </div>`;
 }

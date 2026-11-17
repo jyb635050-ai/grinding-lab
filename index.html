@@ -103,6 +103,8 @@ canvas{display:block;width:100%}
 .col{display:flex;flex-direction:column;gap:12px;min-width:0}
 .dev{font-size:11.5px;font-weight:600;color:var(--accent);padding:2px 10px;border-radius:999px;background:var(--glass-2);border:1px solid var(--edge);white-space:nowrap}
 .ttlrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sites{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:999px;background:var(--glass-2);border:1px solid var(--edge);font-size:11.5px;white-space:nowrap}.sites .lead{color:var(--muted);padding:0 4px 0 8px}.sites a{padding:2px 9px;border-radius:999px;color:var(--ink);text-decoration:none;font-weight:600}.sites a[href]:hover{background:var(--edge)}.sites a.on{background:var(--accent);color:#fff}.xlink{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap}.xlink:hover{text-decoration:underline}
+
 .flow{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;margin:8px 0}
 .flow .st{flex:1 1 120px;min-width:110px;border:1px solid var(--edge);background:var(--glass-3);border-radius:14px;padding:8px 10px;cursor:pointer;transition:all .2s;text-align:left;color:var(--ink)}
 .flow .st .n{font-size:11px;color:var(--muted)} .flow .st b{display:block;font-size:13px}
@@ -190,7 +192,7 @@ footer{padding:4px 18px 16px;color:var(--faint);font-size:11px;display:flex;just
       <g fill="#fff" opacity=".85"><circle cx="11" cy="13" r="2"/><circle cx="28" cy="11" r="1.6"/><circle cx="30" cy="25" r="2.2"/><circle cx="14" cy="29" r="1.8"/><circle cx="21" cy="33" r="1.3"/><circle cx="8" cy="22" r="1.4"/></g>
     </svg>
     <div style="min-width:0">
-      <div class="ttlrow"><h1 id="hTitle"></h1><span class="dev" id="hDev"></span></div>
+      <div class="ttlrow"><h1 id="hTitle"></h1><span class="dev" id="hDev"></span><nav class="sites" id="hSites"></nav></div>
       <div class="sub" id="hSub"></div>
     </div>
   </div>
@@ -254,11 +256,19 @@ function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let
 const FONT = '11px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
 
 // ── 头部文字 ──
+// ═════════ 三站联动：磨削 · 游隙 · 振动 ═════════
+const SITES = { grind: 'https://jyb635050-ai.github.io/grinding-lab/', clr: 'https://jyb635050-ai.github.io/bearing-clearance/', vib: 'https://jyb635050-ai.github.io/bearing-vibration/' };
+function XL(k, zh, en, hash) { return `<a class="xlink" href="${SITES[k]}${hash || ''}" target="_blank" rel="noopener">${L(zh, en)} ↗</a>`; }
+function siteBar(cur) {
+  return `<span class="lead">${L('教学三件套', 'Learning suite')}</span>` + [['grind', '磨削', 'Grinding'], ['clr', '游隙', 'Clearance'], ['vib', '振动', 'Vibration']]
+    .map(([k, z, e]) => k === cur ? `<a class="on" aria-current="page">${L(z, e)}</a>` : `<a href="${SITES[k]}">${L(z, e)}</a>`).join('');
+}
 function renderChrome() {
   document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
   document.title = L('砂轮与油石教学台', 'Grinding Wheel & Stone Lab');
   $('hTitle').textContent = L('砂轮与油石 · 磨削与超精教学', 'Grinding Wheels & Stones · Grinding and Superfinishing');
   $('hDev').textContent = L('开发人员：Jeff', 'Developer: Jeff');
+  $('hSites').innerHTML = siteBar('grind'); $('hSites').setAttribute('aria-label', L('教学三件套', 'Learning suite'));
   $('hSub').textContent = L('案例：深沟球轴承（6210）套圈磨削与沟道超精 · 原理示意，数值为示意或通用量级',
     'Case: deep groove ball bearing rings (6210) — grinding and raceway superfinishing · principles only, values illustrative or generic');
   const names = { process: L('工序', 'Process'), structure: L('结构', 'Structure'), micro: L('微观', 'Micro'), dress: L('修整', 'Dressing'), coolant: L('冷却', 'Coolant'), params: L('参数', 'Parameters') };
@@ -837,7 +847,7 @@ function stepsOf(ring) {
     datum: r === 'inner'
       ? L('内孔套在<b>定心轴</b>上定心（沟道不支撑）+ 背面靠山 + 正面两个压轮压紧端面', 'Bore on a <b>centring arbor</b> (raceway unsupported) + back face on the backing plate + two pressure rollers on the front face')
       : L('外圆支撑头 + 背面靠山 + 正面两个压轮压紧端面', 'OD support shoes + back face on the backing plate + two pressure rollers on the front face'),
-    goal: L('降低粗糙度，去掉磨削留下的尖峰和很薄的变质层，形成交叉网纹；<b class="r">基本不改变尺寸和圆度</b>', 'Lower roughness, remove grinding peaks and a very thin affected layer, create a cross-hatch; <b class="r">size and roundness are hardly changed</b>'),
+    goal: L('降低粗糙度，去掉磨削留下的尖峰和很薄的变质层，形成交叉网纹；<b class="r">基本不改变尺寸和圆度</b>', 'Lower roughness, remove grinding peaks and a very thin affected layer, create a cross-hatch; <b class="r">size and roundness are hardly changed</b>') + ' ' + XL('vib', '粗糙度、波纹度怎样变成振动', 'How roughness and waviness become vibration', '#theory'),
     ctq: ['Ra / Rz', L('表面纹理', 'surface texture'), L('残留磨粒', 'embedded grit'), L('波纹度（高阶）', 'waviness (high order)')],
     why: L('超精只去掉几微米量级，修不了上道的尺寸、圆度和烧伤，所以必须放在最后，并且前面的磨削要先做好。',
       'Superfinishing removes only a few micrometres; it cannot correct size, roundness or burn from earlier steps, so it comes last and the grinding before it must already be right.'),
@@ -852,7 +862,7 @@ function stepsOf(ring) {
       toolTxt: L('大直径成型砂轮：金刚石修整器把砂轮边缘修成和沟曲率一样的圆弧', 'Large formed wheel: a diamond dresser shapes its edge to the raceway radius'),
       motion: L('砂轮高速旋转，工件低速旋转，砂轮沿径向切入（不往复）', 'Wheel spins fast, ring turns slowly, wheel plunges radially (no traverse)'),
       datum: L('端面靠在靠山上（电磁吸住）+ 左边的 V 形支撑头和下面的刀口支撑头顶在沟底', 'Face on the backing plate (magnetic) + V-shaped shoe (left) and knife-edge shoe (below) bearing on the raceway bottom'),
-      goal: L('沟径、沟曲率、沟位置、沟道圆度和波纹度。沟径直接决定合套后的游隙', 'Raceway diameter, curvature, position, roundness and waviness. Raceway diameter sets the clearance after matching'),
+      goal: L('沟径、沟曲率、沟位置、沟道圆度和波纹度。沟径直接决定合套后的游隙', 'Raceway diameter, curvature, position, roundness and waviness. Raceway diameter sets the clearance after matching') + ' ' + XL('clr', '游隙怎么算', 'How clearance is calculated'),
       ctq: [L('沟径（游隙）', 'raceway dia. (clearance)'), L('沟曲率', 'curvature'), L('沟位置', 'position'), L('圆度 / 波纹度', 'roundness / waviness'), L('烧伤', 'burn')],
       why: L('端面磨好后作为定位面。内圈先磨沟道，再以沟道定位磨内孔（「以沟定孔」），这样内孔和沟道同心、壁厚差小。',
         'With the faces ground as the datum, the inner raceway comes first; the bore is then ground locating on the raceway ("bore from raceway"), keeping them concentric with small wall-thickness variation.'),
@@ -895,7 +905,7 @@ function stepsOf(ring) {
       toolTxt: L('小直径成型砂轮伸进外圈里面，边缘修成沟曲率圆弧', 'Small formed wheel inside the outer ring, edge dressed to the raceway radius'),
       motion: L('砂轮高速旋转，工件低速旋转，砂轮从里向外径向切入', 'Wheel spins fast, ring turns slowly, wheel plunges outward radially'),
       datum: L('端面靠在靠山上（电磁吸住）+ 两个支撑头顶住外圆', 'Face on the backing plate (magnetic) + two support shoes on the OD'),
-      goal: L('沟径、沟曲率、沟位置、沟道圆度和波纹度。沟径直接决定合套后的游隙', 'Raceway diameter, curvature, position, roundness and waviness. Raceway diameter sets the clearance after matching'),
+      goal: L('沟径、沟曲率、沟位置、沟道圆度和波纹度。沟径直接决定合套后的游隙', 'Raceway diameter, curvature, position, roundness and waviness. Raceway diameter sets the clearance after matching') + ' ' + XL('clr', '游隙怎么算', 'How clearance is calculated'),
       ctq: [L('沟径（游隙）', 'raceway dia. (clearance)'), L('沟曲率', 'curvature'), L('沟位置', 'position'), L('圆度 / 波纹度', 'roundness / waviness'), L('烧伤', 'burn')],
       why: L('以磨好的外圆和端面定位磨沟道（「以外定沟」），保证沟道对外圆的壁厚均匀。砂轮在圈内，直径受限、线速度和刚性都比外沟磨差。',
         'The raceway is ground locating on the finished OD and face, keeping wall thickness even. The wheel works inside the ring, so its size, surface speed and stiffness are limited compared with external grinding.'),
@@ -915,7 +925,7 @@ function suppCard(key, ring) {
     : key === 'sf'
     ? L('本工序（外圈超精）：<b>两个独立的外圆支撑头</b>（一个在下、一个在左，相隔 90°）托住外圆，背面贴靠山，正面由<b>两个压轮</b>压紧端面。' + ceramicNote[0], 'This step (outer superfinishing): <b>two separate OD shoes</b> (one below, one on the left, 90° apart) carry the OD, the back face sits on the backing plate, and <b>two pressure rollers</b> press the front face.' + ceramicNote[1])
     : key === 'groove' && ring === 'inner'
-    ? L('本工序（小沟磨）：左边一个 <b>V 形支撑头</b>，下面一个<b>刀口支撑头</b>，接触边都做成尖的刀口，<b>顶在沟底</b>；砂轮从右边压过来，V 形支撑头吃住径向力，刀口托住工件。<br><b>为什么顶在沟底</b>：这是支撑头式无心磨，套圈的位置由两个支撑头和砂轮这三个点决定，三个点都在正在磨的沟道上。沟道以它自己为基准，越磨越圆，也不受外圆、挡边误差的影响。<b>为什么做成尖的</b>：只在沟底接触，碰不到沟道两侧的圆弧和挡边，接触位置明确。', 'This step (inner raceway): a <b>V-shaped shoe</b> on the left and a <b>knife-edge shoe</b> below, with knife-edge contact edges <b>bearing on the raceway bottom</b>; the wheel pushes from the right, the V shoe takes the radial force and the knife edge carries the ring.<br><b>Why the raceway bottom</b>: this is shoe-type centerless grinding — the ring is located by three points (two shoes + wheel), all on the raceway being ground, so the raceway references itself, rounds up, and is unaffected by OD or shoulder errors. <b>Why pointed</b>: contact only at the raceway bottom, clear of the groove flanks and shoulders.')
+    ? L('本工序（小沟磨）：左边一个 <b>V 形支撑头</b>，下面一个<b>刀口支撑头</b>，接触边都做成尖的刀口，<b>顶在沟底</b>；砂轮从右边压过来，V 形支撑头吃住径向力，刀口托住工件。<br><b>为什么顶在沟底</b>：这是支撑头式无心磨，套圈的位置由两个支撑头和砂轮这三个点决定，三个点都在正在磨的沟道上。沟道以它自己为基准，不受外圆、挡边误差的影响。<b>两个支撑头的角度调得合适时</b>，圆度误差会一圈一圈收敛；角度不合适，反而会磨出多棱（三棱、五棱这类奇数棱）。<b>为什么做成尖的</b>：只在沟底接触，碰不到沟道两侧的圆弧和挡边，接触位置明确。', 'This step (inner raceway): a <b>V-shaped shoe</b> on the left and a <b>knife-edge shoe</b> below, with knife-edge contact edges <b>bearing on the raceway bottom</b>; the wheel pushes from the right, the V shoe takes the radial force and the knife edge carries the ring.<br><b>Why the raceway bottom</b>: this is shoe-type centerless grinding — the ring is located by three points (two shoes + wheel), all on the raceway being ground, so the raceway references itself and is unaffected by OD or shoulder errors. <b>With well-chosen shoe angles</b> the roundness error shrinks revolution by revolution; with poor angles it can instead grow into lobing (odd lobes such as 3 or 5). <b>Why pointed</b>: contact only at the raceway bottom, clear of the groove flanks and shoulders.')
     : key === 'groove' && ring === 'outer'
     ? L('本工序（大沟磨）：外圆由<b>两个独立的支撑头</b>托住，一个在左、一个在下，<b>相隔 90°</b>，互不相连。砂轮在圈内<b>压向左下方</b>，正对着两个支撑头之间，磨削力由两个支撑头一起抵住，套圈不会被推离支撑。' + ceramicNote[0], 'This step (outer raceway): the OD rests on <b>two separate shoes</b>, one on the left and one below, <b>90° apart</b>, not joined. The wheel inside the ring <b>pushes toward the lower left</b>, between the two shoes, so both shoes take the grinding force and the ring is not pushed off them.' + ceramicNote[1])
     : L('本工序：支撑头顶在<b>外圆</b>上。', 'This step: the shoes sit on the <b>OD</b>.');
@@ -1748,8 +1758,8 @@ function renderMicro() {
       <canvas id="grainCv" style="height:230px;border-radius:12px"></canvas>
       <div class="grp" style="margin-top:8px"><div class="lab">${L('每颗磨粒的最大切深（切屑厚度，相对）', 'max depth per grain (chip thickness, relative)')} <b id="hV"></b></div><input type="range" id="hS" min="0.4" max="3" step="0.05" value="${MC.h}"></div>
       <div id="grainShare"></div>
-      <div class="explain" style="margin-top:8px">${L('磨粒是很多颗<b>负前角</b>的「小刀」。刚接触时切深太小，只能<b>滑擦</b>发热；再深一点把材料<b>挤</b>到两边（耕犁）；超过临界切深才<b>切出切屑</b>。<br>所以切得越薄（砂轮转速高、进给小、磨粒钝），滑擦和耕犁占比越大，<b class="r">单位体积耗能越高、越热，越容易烧伤</b>。',
-        'Grains are tiny tools with <b>negative rake</b>. At first contact the depth is too small: they only <b>rub</b> and heat; a bit deeper they <b>push metal aside</b> (ploughing); only beyond a critical depth do they <b>form a chip</b>.<br>So the thinner the cut (high wheel speed, low feed, dull grains), the larger the rubbing and ploughing share — <b class="r">more energy per volume, more heat, more burn risk</b>.')}</div>
+      <div class="explain" style="margin-top:8px">${L('磨粒是很多颗<b>负前角</b>的「小刀」。刚接触时切深太小，只能<b>滑擦</b>发热；再深一点把材料<b>挤</b>到两边（耕犁）；超过临界切深才<b>切出切屑</b>。<br>所以切得越薄（砂轮转速高、进给小、磨粒钝），滑擦和耕犁占比越大，<b>每去掉一立方毫米材料要耗的能量（比能）越高</b>。<br>但<b>总发热 = 比能 × 去除量</b>，还要看去除率：<b class="r">进给大，去除快，总热量更大</b>。所以砂轮转速高、磨粒钝 → 比能高，更热；进给大 → 总热量大，更热。降进给时比能会高一点，但总热量降得更多，所以<b>降进给仍然是减少烧伤的办法</b>。',
+        'Grains are tiny tools with <b>negative rake</b>. At first contact the depth is too small: they only <b>rub</b> and heat; a bit deeper they <b>push metal aside</b> (ploughing); only beyond a critical depth do they <b>form a chip</b>.<br>So the thinner the cut (high wheel speed, low feed, dull grains), the larger the rubbing and ploughing share — <b>more energy per mm³ removed (higher specific energy)</b>.<br>But <b>total heat = specific energy × volume removed</b>, so removal rate matters too: <b class="r">higher feed removes faster and makes more heat overall</b>. High wheel speed or dull grains → higher specific energy, hotter; high feed → more total heat, hotter. Lowering feed raises specific energy slightly but cuts total heat by more, so <b>reducing feed still reduces burn</b>.')}</div>
     </div>
     <div class="glass card ctl">
       <h2>${L('砂轮表面的一生：锋利 → 钝化 / 堵塞 → 修整', 'Life of the wheel surface: sharp → glazed / loaded → dressed')} ${GEN()}</h2>
@@ -1893,7 +1903,7 @@ function ballHTML() {
       '<b>Good result</b>: small ball scrapes the middle, large ball scrapes both sides. Both pass → groove radius is between R<sub>min</sub> and R<sub>max</sub>.' +
       '<br><b>Reading the marks</b>:<ul style="margin:4px 0 0;padding-left:18px;line-height:1.7"><li><b>small ball</b> scrapes both sides, <b>colour left at the bottom</b> → radius below the lower limit, groove too tight;</li><li><b>large ball</b> scrapes the middle, <b>colour left on the sides</b> → radius above the upper limit, groove too open;</li><li>mark <b>off to one side</b>, or two marks of unequal width → asymmetric groove form (dressing arc centre or dresser set-up off), affecting groove position and contact angle;</li><li>mark <b>intermittent or varying</b> around the circumference → the groove is not uniform around the ring (e.g. roundness, groove position wobble) — confirm on instruments.</li></ul>' +
       '<div class="note" style="margin-top:6px">The colour test is a quick qualitative shop check: keep the film thin and even (a thick film hides micrometre differences), keep ball and raceway clean, press lightly and evenly. The actual radius is decided by contour measurement.</div>')}</div>
-      <p class="note">${L('涂显示剂看钢球接触印子的方法见检查球厂商资料；大小球分别对应上下限是按几何关系推出的做法。', 'Using marking compound on a ball gauge to read contact marks is described by ball-gauge makers; pairing balls with the upper and lower limits follows from the geometry.')}</p>
+      <p class="note">${L('涂显示剂看钢球接触印子的方法见检查球厂商资料；大小球分别对应上下限是按几何关系推出的做法。', 'Using marking compound on a ball gauge to read contact marks is described by ball-gauge makers; pairing balls with the upper and lower limits follows from the geometry.')} ${L('沟曲率怎样影响轴向游隙和接触角：', 'How groove curvature affects axial clearance and contact angle: ')}${XL('clr', '游隙计算站', 'Clearance calculator')}</p>
     </div>
   </div>`;
 }
@@ -2584,6 +2594,7 @@ function renderParams() {
         [L('残留磨粒、清洁度差', 'Embedded grit, poor cleanliness'), L('清洁度检测、测振 H 频段', 'cleanliness test, vibration H band'), L('超精油过滤 → 清洗工序 → 退磁 → 磨削液交叉污染', 'oil filtration → washing → demagnetising → coolant cross-contamination')]
       ].map(r => `<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}
     </table>
+    <p class="note" style="margin:8px 0 0">${L('测振 L / M / H 频段是什么、波纹度和缺陷怎样变成振动：', 'What the L / M / H bands mean and how waviness and defects become vibration: ')}${XL('vib', '振动教学站', 'Vibration lab', '#theory')}</p>
   </div>
   <div class="glass card">
     <h2>${L('资料来源与说明', 'Sources and notes')}</h2>
